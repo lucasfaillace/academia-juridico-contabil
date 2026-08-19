@@ -837,21 +837,20 @@ test("classifica os artigos por tags na listagem e mantém a página inicial enx
 });
 
 test("normaliza cada upload em somente duas versões WebP proporcionais", async () => {
-  const [uploadRoute, mediaRoute, editor, articleRoute, exporter] = await Promise.all([
+  const [uploadRoute, imageProcessing, mediaRoute, editor, articleRoute, exporter] = await Promise.all([
     readFile(new URL("app/api/uploads/images/route.ts", root), "utf8"),
+    readFile(new URL("lib/image-processing.ts", root), "utf8"),
     readFile(new URL("app/media/[key]/route.ts", root), "utf8"),
     readFile(new URL("components/RichEditor.tsx", root), "utf8"),
     readFile(new URL("app/api/articles/route.ts", root), "utf8"),
     readFile(new URL("lib/article-word-export.ts", root), "utf8"),
   ]);
-  assert.match(uploadRoute, /import sharp from "sharp"/);
-  assert.match(uploadRoute, /DESKTOP_MAX_WIDTH = 1600/);
-  assert.match(uploadRoute, /DESKTOP_MAX_HEIGHT = 2000/);
-  assert.match(uploadRoute, /MOBILE_MAX_WIDTH = 800/);
-  assert.match(uploadRoute, /MOBILE_MAX_HEIGHT = 1200/);
+  assert.match(uploadRoute, /processArticleImage/);
+  assert.match(imageProcessing, /desktop: \{ width: 1600, height: 2000 \}/);
+  assert.match(imageProcessing, /mobile: \{ width: 800, height: 1200 \}/);
   assert.equal((uploadRoute.match(/saveOriginal\("imagem-/g) || []).length, 2);
-  assert.match(uploadRoute, /withoutEnlargement: true/);
-  assert.match(uploadRoute, /\.webp\(WEBP_OPTIONS\)/);
+  assert.match(imageProcessing, /withoutEnlargement: true/);
+  assert.match(imageProcessing, /\.webp\(webpOptions\)/);
   assert.doesNotMatch(uploadRoute, /saveOriginal\(`imagem\.\$\{/);
   assert.match(mediaRoute, /desktop\|mobile/);
   assert.match(editor, /\["picture"/);
