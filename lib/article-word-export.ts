@@ -392,7 +392,7 @@ class DocumentBuilder {
 
   private async figure(element: Element) {
     const caption = element.children.find((node) => isElement(node) && node.name === "figcaption");
-    const image = element.children.find((node) => isElement(node) && node.name === "img");
+    const image = findAll(element.children, (node) => isElement(node) && node.name === "img").find(isElement);
     const output: string[] = [];
     if (caption) output.push(paragraph(this.inline(childNodes(caption)), "Caption"));
     if (!image || !isElement(image)) return output;

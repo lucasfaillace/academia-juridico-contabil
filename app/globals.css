@@ -182,6 +182,7 @@ p { margin:0 0 1.2em; }
 .article-content figure[data-image-zoom="true"] { position:relative; cursor:zoom-in; }
 .article-content figure[data-image-zoom="true"]::after { content:"Clique para ampliar"; position:absolute; right:8px; bottom:8px; padding:4px 7px; background:rgba(0,20,55,.86); color:#fff; font-family:var(--sans); font-size:.65rem; line-height:1.2; pointer-events:none; }
 .article-content figure[data-image-zoom="true"]:focus-visible { outline:3px solid #ffbf47; outline-offset:4px; }
+.article-content figure picture { display:block; width:100%; }
 .article-content figure img { display:block; width:100%; height:auto; border:0; }
 .article-content figure[data-image-border="site"] [data-image-frame] { border:1px solid var(--line); }
 .article-content figcaption { margin-bottom:7px; color:var(--blue-700); font-family:"Segoe UI",Arial,sans-serif; font-size:7pt; font-weight:700; line-height:1.35; letter-spacing:.06em; text-align:left; text-transform:uppercase; }
@@ -463,6 +464,7 @@ th { background:#edf2f8; color:var(--blue-950); }
 .ProseMirror figure[data-image-width="100"] { width:100%; }
 .ProseMirror figure [data-image-frame] { overflow:hidden; }
 .ProseMirror figure[data-image-fit="crop"] img { transform:scale(1.092); transform-origin:center; }
+.ProseMirror figure picture { display:block; width:100%; }
 .ProseMirror figure img { display:block; width:100%; border:0; }
 .ProseMirror figure[data-image-border="site"] [data-image-frame] { border:1px solid var(--line); }
 .ProseMirror figcaption { margin-bottom:6px; color:var(--blue-700); font-family:"Segoe UI",Arial,sans-serif; font-size:7pt; font-weight:700; line-height:1.35; letter-spacing:.06em; text-align:left; text-transform:uppercase; }

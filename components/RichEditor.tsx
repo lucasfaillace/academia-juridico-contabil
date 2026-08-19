@@ -45,6 +45,9 @@ type FootnoteItem = {
 type ImageSelection = {
   position: number;
   src: string;
+  mobileSrc: string;
+  imageWidth: number;
+  imageHeight: number;
   originalSrc: string;
   trimmedSrc: string;
   alt: string;
@@ -58,6 +61,14 @@ type ImageSelection = {
 type FormulaSelection = { position: number; latex: string };
 type LinkableArticle = { title: string; slug: string };
 type InternalLinkSelection = { from: number; to: number; linked: boolean };
+type UploadedImage = {
+  url: string;
+  mobileUrl: string;
+  width: number;
+  height: number;
+  mobileWidth: number;
+  mobileHeight: number;
+};
 
 function renderLatex(latex: string) {
   if (!latex.trim()) return "";
@@ -234,6 +245,12 @@ const ArticleImage = Node.create({
   addAttributes() {
     return {
       src: { default: null, parseHTML: (element) => element.querySelector("img")?.getAttribute("src") },
+      mobileSrc: {
+        default: "",
+        parseHTML: (element) => element.getAttribute("data-image-mobile-src") || element.querySelector("source")?.getAttribute("srcset") || "",
+      },
+      imageWidth: { default: 0, parseHTML: (element) => Number(element.querySelector("img")?.getAttribute("width") || 0) },
+      imageHeight: { default: 0, parseHTML: (element) => Number(element.querySelector("img")?.getAttribute("height") || 0) },
       originalSrc: { default: "", parseHTML: (element) => element.getAttribute("data-image-original-src") || "" },
       trimmedSrc: { default: "", parseHTML: (element) => element.getAttribute("data-image-trimmed-src") || "" },
       alt: { default: "", parseHTML: (element) => element.querySelector("img")?.getAttribute("alt") || "" },
@@ -250,11 +267,24 @@ const ArticleImage = Node.create({
   },
   renderHTML({ HTMLAttributes }) {
     const caption = String(HTMLAttributes.caption || "");
+    const src = String(HTMLAttributes.src || "");
+    const mobileSrc = String(HTMLAttributes.mobileSrc || "");
+    const imageWidth = Number(HTMLAttributes.imageWidth || 0);
+    const imageHeight = Number(HTMLAttributes.imageHeight || 0);
+    const image = ["img", {
+      src,
+      alt: String(HTMLAttributes.alt || ""),
+      ...(imageWidth ? { width: String(imageWidth) } : {}),
+      ...(imageHeight ? { height: String(imageHeight) } : {}),
+      loading: "lazy",
+      decoding: "async",
+    }];
     return [
       "figure",
       {
         "data-article-image": "",
         "data-image-width": String(HTMLAttributes.width || "100"),
+        "data-image-mobile-src": mobileSrc,
         "data-image-original-src": String(HTMLAttributes.originalSrc || HTMLAttributes.src || ""),
         "data-image-trimmed-src": String(HTMLAttributes.trimmedSrc || ""),
         "data-image-align": String(HTMLAttributes.align || "center"),
@@ -266,7 +296,9 @@ const ArticleImage = Node.create({
       [
         "div",
         { "data-image-frame": "" },
-        ["img", { src: String(HTMLAttributes.src || ""), alt: String(HTMLAttributes.alt || "") }],
+        ...(mobileSrc
+          ? [["picture", {}, ["source", { media: "(max-width: 600px)", srcset: mobileSrc, type: "image/webp" }], image]]
+          : [image]),
       ],
     ];
   },
@@ -332,6 +364,9 @@ function selectedArticleImage(editor: Editor): ImageSelection | null {
   return {
     position,
     src: String(node.attrs.src || ""),
+    mobileSrc: String(node.attrs.mobileSrc || ""),
+    imageWidth: Number(node.attrs.imageWidth || 0),
+    imageHeight: Number(node.attrs.imageHeight || 0),
     originalSrc: String(node.attrs.originalSrc || node.attrs.src || ""),
     trimmedSrc: String(node.attrs.trimmedSrc || ""),
     alt: String(node.attrs.alt || ""),
@@ -1404,7 +1439,14 @@ export function RichEditor({
     const response = await fetch("/api/uploads/images", { method: "POST", body: formData });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Não foi possível enviar a imagem.");
-    return String(data.url);
+    return {
+      url: String(data.url || ""),
+      mobileUrl: String(data.mobileUrl || ""),
+      width: Number(data.width || 0),
+      height: Number(data.height || 0),
+      mobileWidth: Number(data.mobileWidth || 0),
+      mobileHeight: Number(data.mobileHeight || 0),
+    } satisfies UploadedImage;
   }
 
   async function uploadImage(file: File) {
@@ -1412,20 +1454,27 @@ export function RichEditor({
     setUploadError("");
     setUploadNotice("");
     try {
-      const originalSrc = await saveImageFile(file);
-      let trimmedSrc = "";
+      let sourceFile = file;
+      let marginsAdjusted = false;
       try {
         const trimmedFile = await cropEmptyImageMargins(file);
-        if (trimmedFile) trimmedSrc = await saveImageFile(trimmedFile);
+        if (trimmedFile) {
+          sourceFile = trimmedFile;
+          marginsAdjusted = true;
+        }
       } catch {
-        trimmedSrc = "";
+        sourceFile = file;
       }
+      const uploaded = await saveImageFile(sourceFile);
       activeEditor.chain().focus().insertContent({
         type: "articleImage",
         attrs: {
-          src: trimmedSrc || originalSrc,
-          originalSrc,
-          trimmedSrc,
+          src: uploaded.url,
+          mobileSrc: uploaded.mobileUrl,
+          imageWidth: uploaded.width,
+          imageHeight: uploaded.height,
+          originalSrc: uploaded.url,
+          trimmedSrc: "",
           alt: file.name.replace(/\.[^.]+$/, "").replaceAll("-", " "),
           caption: "",
           width: "100",
@@ -1436,9 +1485,9 @@ export function RichEditor({
           border: false,
         },
       }).run();
-      setUploadNotice(trimmedSrc
-        ? "Imagem inserida com as margens vazias ajustadas. O original foi preservado."
-        : "Imagem inserida. Não foram detectadas margens vazias relevantes; o original foi preservado.");
+      setUploadNotice(marginsAdjusted
+        ? "Imagem ajustada e inserida em duas versões WebP: principal e celular."
+        : "Imagem inserida em duas versões WebP compactadas: principal e celular.");
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : "Não foi possível enviar a imagem.");
     } finally {
@@ -1449,22 +1498,11 @@ export function RichEditor({
 
   async function adjustSelectedImageMargins() {
     if (!imageSelection || imageAdjusting) return;
-    if (imageSelection.trimmedSrc) {
-      const usingTrimmed = imageSelection.src === imageSelection.trimmedSrc;
-      updateSelectedImage({
-        src: usingTrimmed ? imageSelection.originalSrc : imageSelection.trimmedSrc,
-        fit: "contain",
-      });
-      setUploadNotice(usingTrimmed ? "Imagem original restaurada." : "Versão com margens ajustadas aplicada.");
-      return;
-    }
-
     setImageAdjusting(true);
     setUploadError("");
     setUploadNotice("");
     try {
-      const originalSrc = imageSelection.originalSrc || imageSelection.src;
-      const response = await fetch(originalSrc);
+      const response = await fetch(imageSelection.src);
       if (!response.ok) throw new Error("Não foi possível recuperar a imagem original.");
       const blob = await response.blob();
       const extension = blob.type === "image/jpeg" ? "jpg" : blob.type.split("/")[1] || "png";
@@ -1474,9 +1512,17 @@ export function RichEditor({
         setUploadNotice("Não foram detectadas margens vazias relevantes nessa imagem.");
         return;
       }
-      const trimmedSrc = await saveImageFile(trimmedFile);
-      updateSelectedImage({ src: trimmedSrc, originalSrc, trimmedSrc, fit: "contain" });
-      setUploadNotice("Margens vazias ajustadas. A imagem original continua disponível.");
+      const uploaded = await saveImageFile(trimmedFile);
+      updateSelectedImage({
+        src: uploaded.url,
+        mobileSrc: uploaded.mobileUrl,
+        imageWidth: uploaded.width,
+        imageHeight: uploaded.height,
+        originalSrc: uploaded.url,
+        trimmedSrc: "",
+        fit: "contain",
+      });
+      setUploadNotice("Margens vazias ajustadas e as duas versões WebP foram substituídas no artigo.");
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : "Não foi possível ajustar as margens da imagem.");
     } finally {
@@ -1622,18 +1668,10 @@ export function RichEditor({
             <div>
               <button
                 type="button"
-                className={imageSelection.trimmedSrc && imageSelection.src === imageSelection.trimmedSrc ? "is-active" : ""}
-                aria-pressed={Boolean(imageSelection.trimmedSrc && imageSelection.src === imageSelection.trimmedSrc)}
                 disabled={imageAdjusting}
                 onClick={() => void adjustSelectedImageMargins()}
               >
-                {imageAdjusting
-                  ? "Analisando margens…"
-                  : imageSelection.trimmedSrc && imageSelection.src === imageSelection.trimmedSrc
-                    ? "Usar imagem original"
-                    : imageSelection.trimmedSrc
-                      ? "Usar versão ajustada"
-                      : "Ajustar margens automaticamente"}
+                {imageAdjusting ? "Analisando margens…" : "Ajustar margens automaticamente"}
               </button>
               <button
                 type="button"
@@ -1652,7 +1690,7 @@ export function RichEditor({
                 {imageSelection.border ? "Borda do site ativada" : "Adicionar borda do site"}
               </button>
             </div>
-            <small>O ajuste localiza automaticamente o conteúdo visível, preserva uma margem de segurança e guarda a imagem original. A borda do site é independente da moldura existente no arquivo.</small>
+            <small>O ajuste localiza o conteúdo visível e preserva uma margem de segurança. Cada envio grava somente duas versões WebP compactadas, principal e celular; o arquivo bruto não é mantido. A borda do site é independente da moldura existente no arquivo.</small>
           </div>
           <button type="button" onClick={removeSelectedImage}>Remover imagem</button>
         </div>

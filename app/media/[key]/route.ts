@@ -12,7 +12,7 @@ const contentTypes: Record<string, string> = {
 
 export async function GET(_request: Request, { params }: { params: Promise<{ key: string }> }) {
   const { key } = await params;
-  if (!/^[a-f0-9-]+-imagem\.(?:jpe?g|png|webp)$/i.test(key)) {
+  if (!/^[a-f0-9-]+-imagem(?:-(?:desktop|mobile))?\.(?:jpe?g|png|webp)$/i.test(key)) {
     return new NextResponse("Arquivo não encontrado.", { status: 404 });
   }
 

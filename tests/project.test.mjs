@@ -41,7 +41,7 @@ test("inclui controles de segurança e portabilidade", async () => {
   assert.match(articleApi, /data-image-zoom/);
   assert.match(editor, /data-image-border/); assert.match(editor, /Borda do site ativada/); assert.match(editor, /Adicionar borda do site/);
   assert.match(articleApi, /data-image-border/); assert.match(css, /data-image-border="site"/);
-  assert.match(editor, /data-image-fit/); assert.match(editor, /Ajustar margens automaticamente/); assert.match(editor, /Usar imagem original/); assert.match(editor, /data-image-frame/);
+  assert.match(editor, /data-image-fit/); assert.match(editor, /Ajustar margens automaticamente/); assert.match(editor, /duas versões WebP/); assert.match(editor, /data-image-frame/);
   assert.match(editor, /cropEmptyImageMargins/); assert.match(editor, /data-image-original-src/); assert.match(editor, /data-image-trimmed-src/);
   assert.match(articleApi, /data-image-fit/); assert.match(css, /data-image-fit="crop"/);
   assert.match(css, /\.editor-sticky-controls \{ position:sticky/);
@@ -828,4 +828,28 @@ test("classifica os artigos por tags na listagem e mantém a página inicial enx
   assert.doesNotMatch(home, /publication-meta"><span>Artigo<\/span>/);
   assert.doesNotMatch(exporter, /Área:/);
   assert.match(exporter, /Tags: \$\{tags\}/);
+});
+
+test("normaliza cada upload em somente duas versões WebP proporcionais", async () => {
+  const [uploadRoute, mediaRoute, editor, articleRoute, exporter] = await Promise.all([
+    readFile(new URL("app/api/uploads/images/route.ts", root), "utf8"),
+    readFile(new URL("app/media/[key]/route.ts", root), "utf8"),
+    readFile(new URL("components/RichEditor.tsx", root), "utf8"),
+    readFile(new URL("app/api/articles/route.ts", root), "utf8"),
+    readFile(new URL("lib/article-word-export.ts", root), "utf8"),
+  ]);
+  assert.match(uploadRoute, /import sharp from "sharp"/);
+  assert.match(uploadRoute, /DESKTOP_MAX_WIDTH = 1600/);
+  assert.match(uploadRoute, /DESKTOP_MAX_HEIGHT = 2000/);
+  assert.match(uploadRoute, /MOBILE_MAX_WIDTH = 800/);
+  assert.match(uploadRoute, /MOBILE_MAX_HEIGHT = 1200/);
+  assert.equal((uploadRoute.match(/saveOriginal\("imagem-/g) || []).length, 2);
+  assert.match(uploadRoute, /withoutEnlargement: true/);
+  assert.match(uploadRoute, /\.webp\(WEBP_OPTIONS\)/);
+  assert.doesNotMatch(uploadRoute, /saveOriginal\(`imagem\.\$\{/);
+  assert.match(mediaRoute, /desktop\|mobile/);
+  assert.match(editor, /\["picture"/);
+  assert.match(editor, /mobileSrc: uploaded\.mobileUrl/);
+  assert.match(articleRoute, /"picture", "source"/);
+  assert.match(exporter, /findAll\(element\.children,[\s\S]*node\.name === "img"/);
 });
