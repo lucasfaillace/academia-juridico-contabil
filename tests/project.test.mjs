@@ -898,3 +898,14 @@ test("endurece o Nginx e documenta a Cloudflare gratuita como opcional", async (
   assert.match(env, /CLOUDFLARE_CACHE_PURGE_ENABLED=false/);
   assert.doesNotMatch(packageJson, /cloudflare/i);
 });
+
+test("fixa correções transitivas auditadas no gerenciador de pacotes", async () => {
+  const [packageJson, workspace] = await Promise.all([
+    readFile(new URL("package.json", root), "utf8"),
+    readFile(new URL("pnpm-workspace.yaml", root), "utf8"),
+  ]);
+  assert.match(packageJson, /"sharp": "0\.35\.3"/);
+  assert.match(workspace, /nanoid: 3\.3\.18/);
+  assert.match(workspace, /postcss: 8\.5\.23/);
+  assert.match(workspace, /sharp: 0\.35\.3/);
+});
