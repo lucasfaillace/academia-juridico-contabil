@@ -11,6 +11,7 @@ import { getPool, hasDatabaseConfig } from "@/lib/db";
 import { deleteStoredArticle, listStoredArticles, saveStoredArticle, usesFileContentFallback } from "@/lib/preview-store";
 import { listPreviewTags } from "@/lib/tag-store";
 import { crossOriginMutationResponse } from "@/lib/request-security";
+import { purgeOptionalCloudflareCache } from "@/lib/cloudflare-cache";
 
 function isYouTubeUrl(value: string) {
   if (!value) return true;
@@ -98,6 +99,13 @@ function sanitizeContent(content: string) {
   });
 }
 
+async function invalidateArticlePages(slug: string, previousSlug?: string) {
+  const paths = ["/", "/blog", `/blog/${slug}`];
+  if (previousSlug && previousSlug !== slug) paths.push(`/blog/${previousSlug}`);
+  for (const path of paths) revalidatePath(path);
+  await purgeOptionalCloudflareCache({ paths });
+}
+
 async function syncFootnoteReferences(client: PoolClient, articleId: string, content: string) {
   await client.query("DELETE FROM article_footnote_references WHERE article_id=$1", [articleId]);
   for (const link of extractFootnoteReferenceLinks(content)) {
@@ -172,9 +180,7 @@ export async function POST(request: Request) {
       tags: selectedTags,
       authors,
     });
-    revalidatePath("/");
-    revalidatePath("/blog");
-    revalidatePath(`/blog/${slug}`);
+    await invalidateArticlePages(slug, parsed.data.originalSlug);
     return NextResponse.json(article, { status: 201 });
   }
 
@@ -222,9 +228,7 @@ export async function POST(request: Request) {
     }
     await syncFootnoteReferences(client, articleId, content);
     await client.query("COMMIT");
-    revalidatePath("/");
-    revalidatePath("/blog");
-    revalidatePath(`/blog/${slug}`);
+    await invalidateArticlePages(slug, parsed.data.originalSlug);
     return NextResponse.json(result.rows[0], { status: 201 });
   } catch (error) {
     await client.query("ROLLBACK");
@@ -250,18 +254,14 @@ export async function DELETE(request: Request) {
     const deleted = await deleteStoredArticle(slug);
     if (!deleted) return NextResponse.json({ error: "Artigo não encontrado." }, { status: 404 });
     await deletePreviewCommentsForArticle(slug);
-    revalidatePath("/");
-    revalidatePath("/blog");
-    revalidatePath(`/blog/${slug}`);
+    await invalidateArticlePages(slug);
     return NextResponse.json({ ok: true });
   }
 
   try {
     const result = await getPool().query("DELETE FROM articles WHERE slug=$1 RETURNING slug", [slug]);
     if (!result.rowCount) return NextResponse.json({ error: "Artigo não encontrado." }, { status: 404 });
-    revalidatePath("/");
-    revalidatePath("/blog");
-    revalidatePath(`/blog/${slug}`);
+    await invalidateArticlePages(slug);
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("article_delete_failed", error instanceof Error ? error.message : "unknown");

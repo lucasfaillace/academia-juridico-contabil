@@ -7,6 +7,7 @@ import { getPool, hasDatabaseConfig } from "@/lib/db";
 import { listStoredArticles, usesFileContentFallback } from "@/lib/preview-store";
 import { createPreviewTag, deletePreviewTag, listPreviewTags, slugifyTag, updatePreviewTag } from "@/lib/tag-store";
 import { crossOriginMutationResponse } from "@/lib/request-security";
+import { purgeOptionalCloudflareCache } from "@/lib/cloudflare-cache";
 
 const tagSchema = z.object({
   name: z.string().trim().min(2).max(120),
@@ -17,6 +18,13 @@ const deleteSchema = z.object({ id: z.string().uuid() });
 
 async function authorized() {
   return verifySession((await cookies()).get("academia_session")?.value);
+}
+
+async function invalidateTagPages() {
+  revalidatePath("/");
+  revalidatePath("/blog");
+  revalidatePath("/blog/[slug]", "page");
+  await purgeOptionalCloudflareCache({ paths: ["/", "/blog"], prefixes: ["/blog/"] });
 }
 
 export async function GET() {
@@ -50,7 +58,9 @@ export async function POST(request: Request) {
   if (!parsed.success) return NextResponse.json({ error: "Informe um nome e uma área válidos." }, { status: 400 });
   if (!hasDatabaseConfig() && usesFileContentFallback()) {
     try {
-      return NextResponse.json(await createPreviewTag(parsed.data), { status: 201 });
+      const tag = await createPreviewTag(parsed.data);
+      await invalidateTagPages();
+      return NextResponse.json(tag, { status: 201 });
     } catch (error) {
       return NextResponse.json({ error: error instanceof Error ? error.message : "Não foi possível criar a tag." }, { status: 409 });
     }
@@ -61,6 +71,7 @@ export async function POST(request: Request) {
       "INSERT INTO tags(name,slug,kind) VALUES($1,$2,$3) RETURNING id,name,slug,kind",
       [parsed.data.name, slug, parsed.data.kind],
     );
+    await invalidateTagPages();
     return NextResponse.json(result.rows[0], { status: 201 });
   } catch {
     return NextResponse.json({ error: "Já existe uma tag com esse nome." }, { status: 409 });
@@ -75,7 +86,9 @@ export async function PATCH(request: Request) {
   if (!parsed.success) return NextResponse.json({ error: "Dados da tag inválidos." }, { status: 400 });
   if (!hasDatabaseConfig() && usesFileContentFallback()) {
     try {
-      return NextResponse.json(await updatePreviewTag(parsed.data.id, parsed.data));
+      const tag = await updatePreviewTag(parsed.data.id, parsed.data);
+      await invalidateTagPages();
+      return NextResponse.json(tag);
     } catch (error) {
       return NextResponse.json({ error: error instanceof Error ? error.message : "Não foi possível atualizar a tag." }, { status: 409 });
     }
@@ -86,7 +99,7 @@ export async function PATCH(request: Request) {
       [parsed.data.name, slugifyTag(parsed.data.name), parsed.data.kind, parsed.data.id],
     );
     if (!result.rowCount) return NextResponse.json({ error: "Tag não encontrada." }, { status: 404 });
-    revalidatePath("/blog");
+    await invalidateTagPages();
     return NextResponse.json(result.rows[0]);
   } catch {
     return NextResponse.json({ error: "Já existe uma tag com esse nome." }, { status: 409 });
@@ -102,6 +115,7 @@ export async function DELETE(request: Request) {
   if (!hasDatabaseConfig() && usesFileContentFallback()) {
     try {
       await deletePreviewTag(parsed.data.id);
+      await invalidateTagPages();
       return NextResponse.json({ deleted: true });
     } catch (error) {
       return NextResponse.json({ error: error instanceof Error ? error.message : "Não foi possível excluir a tag." }, { status: 404 });
@@ -109,6 +123,6 @@ export async function DELETE(request: Request) {
   }
   const result = await getPool().query("DELETE FROM tags WHERE id=$1 RETURNING id", [parsed.data.id]);
   if (!result.rowCount) return NextResponse.json({ error: "Tag não encontrada." }, { status: 404 });
-  revalidatePath("/blog");
+  await invalidateTagPages();
   return NextResponse.json({ deleted: true });
 }

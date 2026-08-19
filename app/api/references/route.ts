@@ -21,6 +21,7 @@ import {
 } from "@/lib/reference-store";
 import { listPreviewFichamentos } from "@/lib/reference-fichamento-store";
 import { crossOriginMutationResponse } from "@/lib/request-security";
+import { purgeOptionalCloudflareCache } from "@/lib/cloudflare-cache";
 
 const referenceSchema = z.object({
   referenceHtml: z.string().trim().min(1).max(40_000).optional(),
@@ -220,9 +221,10 @@ function parsedReference(input: z.infer<typeof referenceSchema>) {
   return { referenceHtml, referenceText };
 }
 
-function revalidateReferencePages() {
+async function revalidateReferencePages() {
   revalidatePath("/blog");
   revalidatePath("/blog/[slug]", "page");
+  await purgeOptionalCloudflareCache({ paths: ["/blog"], prefixes: ["/blog/"] });
 }
 
 export async function POST(request: Request) {
@@ -275,7 +277,7 @@ export async function PATCH(request: Request) {
       const similar = similarPreviewReferences(reference.referenceText, references, parsed.data.id);
       if (similar.length && !parsed.data.confirmSimilar) return similarResponse(similar);
       const updated = await updatePreviewReference(parsed.data.id, reference.referenceText, reference.referenceHtml);
-      revalidateReferencePages();
+      await revalidateReferencePages();
       return NextResponse.json(updated);
     } catch (error) {
       return NextResponse.json({ error: error instanceof Error ? error.message : "Não foi possível atualizar a referência." }, { status: 409 });
@@ -293,7 +295,7 @@ export async function PATCH(request: Request) {
       [reference.referenceText, reference.referenceHtml, normalizeReferenceText(reference.referenceText), parsed.data.id],
     );
     if (!result.rowCount) return NextResponse.json({ error: "Referência não encontrada." }, { status: 404 });
-    revalidateReferencePages();
+    await revalidateReferencePages();
     return NextResponse.json(result.rows[0]);
   } catch {
     return NextResponse.json({ error: "Esta referência já está cadastrada." }, { status: 409 });

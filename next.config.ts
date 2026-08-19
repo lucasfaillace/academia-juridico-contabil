@@ -5,6 +5,11 @@ const noStoreHeaders = [
   { key: "Cloudflare-CDN-Cache-Control", value: "no-store" },
 ];
 
+const publicEdgeCacheHeaders = [
+  { key: "CDN-Cache-Control", value: "public, s-maxage=300, stale-while-revalidate=86400" },
+  { key: "Cloudflare-CDN-Cache-Control", value: "public, s-maxage=300, stale-while-revalidate=86400" },
+];
+
 const reportOnlyPolicy = [
   "default-src 'self'",
   "base-uri 'self'",
@@ -37,6 +42,10 @@ const nextConfig: NextConfig = {
       ] },
       { source: "/admin/:path*", headers: noStoreHeaders },
       { source: "/api/:path*", headers: noStoreHeaders },
+      { source: "/", headers: publicEdgeCacheHeaders },
+      { source: "/blog", headers: publicEdgeCacheHeaders },
+      { source: "/blog/:path*", headers: publicEdgeCacheHeaders },
+      { source: "/publicacoes", headers: publicEdgeCacheHeaders },
     ];
   },
 };

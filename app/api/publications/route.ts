@@ -8,6 +8,7 @@ import { getPool, hasDatabaseConfig } from "@/lib/db";
 import { deleteStoredPublication, listStoredPublications, saveStoredPublication } from "@/lib/publication-store";
 import { usesFileContentFallback } from "@/lib/preview-store";
 import { crossOriginMutationResponse } from "@/lib/request-security";
+import { purgeOptionalCloudflareCache } from "@/lib/cloudflare-cache";
 
 const publicationSchema = z.object({
   id: z.string().uuid().optional(),
@@ -43,6 +44,11 @@ function sanitizeReference(value: string) {
       }),
     },
   }).trim();
+}
+
+async function invalidatePublicationsPage() {
+  revalidatePath("/publicacoes");
+  await purgeOptionalCloudflareCache({ paths: ["/publicacoes"] });
 }
 
 export async function GET() {
@@ -81,7 +87,7 @@ export async function POST(request: Request) {
   }
   if (!hasDatabaseConfig() && usesFileContentFallback()) {
     const publication = await saveStoredPublication({ ...parsed.data, referenceHtml });
-    revalidatePath("/publicacoes");
+    await invalidatePublicationsPage();
     return NextResponse.json(publication, { status: 201 });
   }
   try {
@@ -100,7 +106,7 @@ export async function POST(request: Request) {
         [referenceHtml, parsed.data.pdfKey || null, parsed.data.externalUrl || null, parsed.data.publicationDate, parsed.data.status],
       );
     if (!result.rowCount) return NextResponse.json({ error: "Publicação não encontrada." }, { status: 404 });
-    revalidatePath("/publicacoes");
+    await invalidatePublicationsPage();
     return NextResponse.json(result.rows[0], { status: 201 });
   } catch (error) {
     console.error("publication_save_failed", error instanceof Error ? error.message : "unknown");
@@ -119,13 +125,13 @@ export async function DELETE(request: Request) {
   if (!hasDatabaseConfig() && usesFileContentFallback()) {
     const deleted = await deleteStoredPublication(parsed.data.id);
     if (!deleted) return NextResponse.json({ error: "Publicação não encontrada." }, { status: 404 });
-    revalidatePath("/publicacoes");
+    await invalidatePublicationsPage();
     return NextResponse.json({ ok: true });
   }
   try {
     const result = await getPool().query("DELETE FROM publications WHERE id=$1", [parsed.data.id]);
     if (!result.rowCount) return NextResponse.json({ error: "Publicação não encontrada." }, { status: 404 });
-    revalidatePath("/publicacoes");
+    await invalidatePublicationsPage();
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json({ error: "Não foi possível excluir a publicação." }, { status: 503 });

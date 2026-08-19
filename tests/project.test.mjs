@@ -16,7 +16,7 @@ test("usa a identidade e não mantém o preview inicial", async () => {
 });
 
 test("inclui controles de segurança e portabilidade", async () => {
-  const [compose, env, migration, articleApi, imageApi, editor, articlePage, articleHtml, richContent, css, auth, login, nextConfig] = await Promise.all([
+  const [compose, env, migration, articleApi, imageApi, editor, articlePage, articleHtml, richContent, css, auth, login, nextConfig, cloudflareCache] = await Promise.all([
     readFile(new URL("docker-compose.yml", root), "utf8"), readFile(new URL(".env.example", root), "utf8"),
     readFile(new URL("migrations/001_initial.sql", root), "utf8"),
     readFile(new URL("app/api/articles/route.ts", root), "utf8"),
@@ -29,6 +29,7 @@ test("inclui controles de segurança e portabilidade", async () => {
     readFile(new URL("lib/auth.ts", root), "utf8"),
     readFile(new URL("app/api/auth/login/route.ts", root), "utf8"),
     readFile(new URL("next.config.ts", root), "utf8"),
+    readFile(new URL("lib/cloudflare-cache.ts", root), "utf8"),
   ]);
   assert.match(compose, /postgres:17-alpine/); assert.match(env, /AUTH_SECRET/); assert.match(migration, /CHECK \(status IN \('draft','published'\)\)/);
   assert.match(articleApi, /sanitizeHtml/); assert.match(articleApi, /data-footnote/); assert.match(editor, /Inserir nota de rodapé/);
@@ -63,6 +64,10 @@ test("inclui controles de segurança e portabilidade", async () => {
   assert.match(articlePage, /replace\(\/<\/g, "\\\\u003c"\)/);
   assert.match(nextConfig, /Content-Security-Policy-Report-Only/);
   assert.match(nextConfig, /Cloudflare-CDN-Cache-Control/);
+  assert.match(cloudflareCache, /CLOUDFLARE_CACHE_PURGE_ENABLED/);
+  assert.match(cloudflareCache, /prefixes/);
+  assert.match(cloudflareCache, /AbortSignal\.timeout/);
+  assert.match(articleApi, /purgeOptionalCloudflareCache/);
 });
 
 test("mantém referências abreviadas vinculadas e contabilizadas", async () => {
