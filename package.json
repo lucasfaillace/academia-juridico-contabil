@@ -1,0 +1,59 @@
+{
+  "name": "academia-juridico-contabil",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "preview:local": "CONTENT_FALLBACK_MODE=file next dev -p 3022",
+    "build": "next build",
+    "start": "next start",
+    "test": "node --test tests/*.test.mjs",
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern '.next*' --ignore-pattern work",
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "node scripts/migrate.mjs",
+    "admin:hash": "node scripts/hash-password.mjs"
+  },
+  "dependencies": {
+    "@tiptap/core": "^3.28.0",
+    "@tiptap/extension-link": "^3.28.0",
+    "@tiptap/extension-table": "^3.28.0",
+    "@tiptap/extension-table-cell": "^3.28.0",
+    "@tiptap/extension-table-header": "^3.28.0",
+    "@tiptap/extension-table-row": "^3.28.0",
+    "@tiptap/extension-underline": "^3.28.0",
+    "@tiptap/pm": "^3.28.0",
+    "@tiptap/react": "^3.28.0",
+    "@tiptap/starter-kit": "^3.28.0",
+    "domhandler": "^5.0.3",
+    "fflate": "^0.7.5",
+    "htmlparser2": "^10.1.0",
+    "katex": "^0.18.1",
+    "lucide-react": "^1.25.0",
+    "mammoth": "^1.12.0",
+    "next": "16.2.6",
+    "nodemailer": "^9.0.3",
+    "pg": "^8.22.0",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "sanitize-html": "^2.17.6",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.2.1",
+    "@types/katex": "^0.16.8",
+    "@types/node": "22.19.19",
+    "@types/nodemailer": "^8.0.1",
+    "@types/pg": "^8.20.0",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@types/sanitize-html": "^2.16.1",
+    "eslint": "9.39.4",
+    "eslint-config-next": "16.2.6",
+    "tailwindcss": "4.2.1",
+    "typescript": "5.9.3"
+  },
+  "type": "module"
+}

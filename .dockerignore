@@ -1,0 +1,16 @@
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+.next
+node_modules
+outputs
+work
+storage/uploads/*
+!storage/uploads/.gitkeep
+*.log
+*.dump
+backups
+tsconfig.tsbuildinfo
+.DS_Store

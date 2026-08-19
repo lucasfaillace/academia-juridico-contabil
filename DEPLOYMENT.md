@@ -1,0 +1,334 @@
+# Implantação em Ubuntu ou Debian
+
+Este roteiro instala a Academia em uma única VPS. A aplicação e o PostgreSQL ficam em contêineres; Nginx e Certbot ficam no host. As referências oficiais são a documentação de [Docker para Ubuntu](https://docs.docker.com/engine/install/ubuntu/), [Docker para Debian](https://docs.docker.com/engine/install/debian/), [proxy reverso do Nginx](https://nginx.org/en/docs/http/ngx_http_proxy_module.html) e [Certbot com Nginx](https://certbot.eff.org/instructions?ws=nginx&os=snap).
+
+Substitua nos comandos:
+
+- `URL_DO_REPOSITORIO`: URL Git real;
+- `academia.seudominio.br`: domínio definitivo;
+- `IPV4_DA_VPS` e, se houver, `IPV6_DA_VPS`.
+
+## 1. Preparar o servidor
+
+Use Ubuntu 24.04/26.04 LTS ou Debian 12/13 de 64 bits. Entre por SSH com usuário que tenha `sudo`:
+
+```bash
+sudo apt update
+sudo apt full-upgrade -y
+sudo apt install -y ca-certificates curl git nginx snapd openssl ufw rsync
+sudo timedatectl set-timezone UTC
+sudo systemctl enable --now nginx snapd
+sudo ufw allow OpenSSH
+sudo ufw allow 'Nginx Full'
+sudo ufw --force enable
+```
+
+Se o kernel foi atualizado, reinicie e reconecte:
+
+```bash
+sudo reboot
+```
+
+## 2. Instalar Docker pelo repositório oficial
+
+```bash
+sudo apt remove -y docker.io docker-compose docker-compose-v2 docker-doc podman-docker containerd runc || true
+. /etc/os-release
+case "$ID" in ubuntu|debian) DOCKER_OS="$ID" ;; *) echo "Distribuição não suportada: $ID"; exit 1 ;; esac
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL "https://download.docker.com/linux/$DOCKER_OS/gpg" -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+sudo tee /etc/apt/sources.list.d/docker.sources >/dev/null <<EOF
+Types: deb
+URIs: https://download.docker.com/linux/$DOCKER_OS
+Suites: ${UBUNTU_CODENAME:-$VERSION_CODENAME}
+Components: stable
+Architectures: $(dpkg --print-architecture)
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo systemctl enable --now docker
+sudo docker run --rm hello-world
+sudo usermod -aG docker "$USER"
+```
+
+Saia da sessão SSH e entre novamente para aplicar o grupo `docker`. Confirme:
+
+```bash
+docker version
+docker compose version
+```
+
+## 3. Clonar o repositório
+
+```bash
+sudo install -d -m 0755 -o "$USER" -g "$USER" /opt/academia
+git clone URL_DO_REPOSITORIO /opt/academia/app
+cd /opt/academia/app
+```
+
+Para repositório privado, use uma chave SSH de implantação com acesso somente de leitura. Não grave token no endereço remoto.
+
+## 4. Configurar `.env`
+
+```bash
+cd /opt/academia/app
+cp .env.example .env
+chmod 600 .env
+openssl rand -hex 32
+openssl rand -hex 64
+openssl rand -hex 64
+nano .env
+```
+
+Use a primeira saída em `POSTGRES_PASSWORD`, a segunda em `AUTH_SECRET` e a terceira em `ANALYTICS_HASH_SECRET`. Configure:
+
+- `NEXT_PUBLIC_SITE_URL=https://academia.seudominio.br`;
+- `NEXT_PUBLIC_GA_MEASUREMENT_ID=G-XXXXXXXXXX` (opcional; identificador do Google Analytics 4);
+- `ANALYTICS_HASH_SECRET=` com o terceiro segredo gerado;
+- PostgreSQL (`POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`);
+- administrador (`ADMIN_EMAIL`; o hash será criado no passo 7);
+- SMTP e endereços do formulário de contato.
+
+Valide sem exibir segredos:
+
+```bash
+docker compose config --quiet
+```
+
+## 5. Construir e iniciar os serviços
+
+Primeiro construa a imagem para poder gerar a senha administrativa:
+
+```bash
+docker compose build app migrate
+```
+
+Depois do passo 7, inicie tudo:
+
+```bash
+docker compose up -d
+docker compose ps
+```
+
+O fluxo aguarda o PostgreSQL, executa migrações e só então inicia a aplicação. Nenhuma porta do banco é publicada.
+
+## 6. Executar migrações
+
+O `docker compose up` executa migrações automaticamente. Para executá-las ou auditá-las manualmente:
+
+```bash
+docker compose run --rm migrate
+docker compose logs --tail=100 migrate
+```
+
+Cada migração é registrada com checksum em `app_migrations`, usa transação e trava consultiva para impedir duas execuções simultâneas.
+
+## 7. Criar o primeiro administrador
+
+Execute o assistente. A senha não é exibida nem gravada em histórico:
+
+```bash
+cd /opt/academia/app
+./scripts/create-admin.sh
+```
+
+O script solicita e-mail e senha, gera um hash scrypt com salt aleatório e atualiza apenas `ADMIN_EMAIL` e `ADMIN_PASSWORD_HASH` no `.env`. Depois:
+
+```bash
+docker compose up -d --force-recreate app
+```
+
+O login estará em `https://academia.seudominio.br/admin/login` depois da configuração do domínio e SSL.
+
+## 8. Configurar o domínio no Nginx
+
+Substitua o domínio e instale os arquivos:
+
+```bash
+cd /opt/academia/app
+sed 's/academia\.exemplo\.br/academia.seudominio.br/g; s/www\.academia\.exemplo\.br/www.academia.seudominio.br/g' nginx/academia.conf.example > /tmp/academia.conf
+sudo cp nginx/00-connection-upgrade.conf /etc/nginx/conf.d/00-connection-upgrade.conf
+sudo cp /tmp/academia.conf /etc/nginx/sites-available/academia
+sudo ln -sfn /etc/nginx/sites-available/academia /etc/nginx/sites-enabled/academia
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+Confirme que o contêiner responde apenas localmente:
+
+```bash
+curl -fsS http://127.0.0.1:3000/api/health
+sudo ss -lntp | grep -E ':80|:3000'
+```
+
+## 9. Configurar DNS
+
+No painel do registrador/provedor DNS, crie:
+
+| Tipo | Nome | Valor | TTL inicial |
+|---|---|---|---|
+| A | `academia` | `IPV4_DA_VPS` | 300 |
+| AAAA | `academia` | `IPV6_DA_VPS` | 300 |
+| CNAME | `www.academia` | `academia.seudominio.br` | 300 |
+
+Não crie AAAA se a VPS não tiver IPv6 funcional. Verifique a propagação:
+
+```bash
+dig +short A academia.seudominio.br
+dig +short AAAA academia.seudominio.br
+```
+
+Os endereços retornados precisam apontar para a VPS antes de solicitar SSL.
+
+## 10. Testar Nginx em HTTP
+
+```bash
+sudo nginx -t
+curl -I http://academia.seudominio.br
+sudo tail -n 100 /var/log/nginx/academia.error.log
+```
+
+## 11. Configurar SSL/HTTPS
+
+Instale Certbot pelo snap, conforme recomendação oficial:
+
+```bash
+sudo snap install --classic certbot
+sudo ln -sfn /snap/bin/certbot /usr/local/bin/certbot
+sudo certbot --nginx -d academia.seudominio.br -d www.academia.seudominio.br --redirect --hsts --staple-ocsp
+sudo certbot renew --dry-run
+systemctl list-timers | grep certbot
+```
+
+Se não usar `www`, retire o segundo `-d` e remova esse nome do `server_name`. Confirme:
+
+```bash
+curl -fsSI https://academia.seudominio.br
+```
+
+## 12. Consultar logs e saúde
+
+```bash
+cd /opt/academia/app
+docker compose ps
+docker compose logs -f --tail=200 app
+docker compose logs -f --tail=200 db
+docker compose logs --tail=200 migrate
+sudo journalctl -u nginx -n 200 --no-pager
+sudo tail -f /var/log/nginx/academia.access.log /var/log/nginx/academia.error.log
+curl -fsS https://academia.seudominio.br/api/health
+```
+
+Os logs dos contêineres usam rotação local: cinco arquivos de até 10 MB por serviço. Eles não registram senhas nem conteúdo de mensagens deliberadamente.
+
+## 13. Atualizar a aplicação
+
+O script atualiza apenas por avanço direto, realiza backup antes da troca, reconstrói a imagem, aplica migrações e recria os serviços:
+
+```bash
+cd /opt/academia/app
+DEPLOY_BRANCH=main BACKUP_ROOT=/var/backups/academia ./scripts/update.sh
+```
+
+Antes da primeira atualização, prepare o diretório:
+
+```bash
+sudo install -d -m 0700 -o "$USER" -g "$USER" /var/backups/academia
+```
+
+Se a atualização falhar, não apague volumes. Volte o código ao commit anterior somente após avaliar as migrações; quando necessário, restaure o backup pré-atualização.
+
+## 14. Fazer backup
+
+```bash
+cd /opt/academia/app
+sudo install -d -m 0700 -o "$USER" -g "$USER" /var/backups/academia
+./scripts/backup.sh /var/backups/academia
+```
+
+O resultado contém `postgres.dump`, `uploads.tar.gz`, manifesto e checksums. Copie cada backup para outro servidor ou armazenamento de objetos cifrado. O `.env` não é incluído; mantenha uma cópia cifrada separada.
+
+Agendamento diário às 03:15 UTC:
+
+```bash
+(crontab -l 2>/dev/null; echo '15 3 * * * cd /opt/academia/app && ./scripts/backup.sh /var/backups/academia >> /var/backups/academia/backup.log 2>&1') | crontab -
+```
+
+## 15. Restaurar backup
+
+Faça primeiro um backup do estado atual. Em seguida:
+
+```bash
+cd /opt/academia/app
+./scripts/backup.sh /var/backups/academia-pre-restauracao
+CONFIRM_RESTORE=RESTAURAR ./scripts/restore.sh /var/backups/academia/AAAAmmddTHHMMSSZ
+curl -fsS http://127.0.0.1:3000/api/health
+```
+
+A restauração valida checksums, interrompe a aplicação, substitui banco e uploads, reaplica migrações pendentes e reinicia o serviço.
+
+## 16. Migrar para outro servidor
+
+1. Baixe o TTL do DNS para 300 pelo menos 24 horas antes.
+2. Prepare a nova VPS pelos passos 1 a 7 e clone exatamente a mesma revisão do código.
+3. Copie o `.env` por canal seguro e aplique `chmod 600`.
+4. Na VPS antiga, interrompa escrita e faça o backup final:
+
+```bash
+cd /opt/academia/app
+docker compose stop app
+./scripts/backup.sh /var/backups/academia-migracao
+```
+
+5. Transfira o backup para a nova VPS:
+
+```bash
+rsync -avP /var/backups/academia-migracao/ USUARIO@IP_NOVO:/var/backups/academia-migracao/
+```
+
+6. Na nova VPS, restaure e valide localmente:
+
+```bash
+cd /opt/academia/app
+CONFIRM_RESTORE=RESTAURAR ./scripts/restore.sh /var/backups/academia-migracao/AAAAmmddTHHMMSSZ
+curl -fsS http://127.0.0.1:3000/api/health
+```
+
+7. Configure Nginx/SSL na nova VPS, altere A/AAAA para o novo IP e valide o site.
+8. Mantenha a VPS antiga desligada para escrita, mas disponível para reversão, por alguns dias. Depois eleve novamente o TTL.
+
+## Recursos mínimos sugeridos
+
+- mínimo técnico: 1 vCPU, 2 GB RAM, 20 GB SSD e 1 GB de swap;
+- recomendado para produção inicial: 2 vCPU, 4 GB RAM, 40 GB SSD NVMe;
+- espaço adicional conforme crescimento de imagens, logs e retenção de backups;
+- Ubuntu 24.04/26.04 LTS ou Debian 12/13, arquitetura amd64 ou arm64.
+
+## Portas
+
+- `22/tcp`: SSH, restrinja por IP quando possível;
+- `80/tcp`: HTTP e validação/redirect do Certbot;
+- `443/tcp`: HTTPS público;
+- `3000/tcp`: aplicação, vinculada somente a `127.0.0.1`;
+- `5432/tcp`: PostgreSQL apenas na rede interna do Compose, não publicado.
+
+## Checklist de publicação
+
+- [ ] DNS A/AAAA aponta para a VPS correta.
+- [ ] `.env` tem permissão `600` e não está no Git.
+- [ ] Senhas do PostgreSQL, administrador, SMTP, `AUTH_SECRET` e `ANALYTICS_HASH_SECRET` são exclusivas.
+- [ ] `docker compose ps` mostra `db` e `app` saudáveis.
+- [ ] Migrações aparecem como aplicadas.
+- [ ] Nginx passa em `sudo nginx -t`.
+- [ ] HTTPS responde e `certbot renew --dry-run` passa.
+- [ ] Login administrativo funciona.
+- [ ] Publicação de artigo, notas de rodapé e persistência após reinício foram testadas.
+- [ ] Consentimento de estatísticas foi testado nas opções aceitar, recusar e rever preferências.
+- [ ] A área administrativa de estatísticas registra acessos públicos, mas ignora acessos do administrador.
+- [ ] Se o GA4 for utilizado, `NEXT_PUBLIC_GA_MEASUREMENT_ID` contém o identificador `G-...` correto.
+- [ ] Formulário de contato envia para o destinatário correto.
+- [ ] Backup foi criado, copiado para fora da VPS e restaurado em teste.
+- [ ] Páginas provisórias, privacidade e termos foram revisados.

@@ -1,0 +1,3 @@
+import type { MetadataRoute } from "next";
+import { articles } from "@/lib/content";
+export default function sitemap(): MetadataRoute.Sitemap { const base = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"; const pages = ["", "/blog", "/publicacoes", "/sobre", "/cursos", "/canais", "/contato", "/privacidade", "/termos"]; return [...pages.map((path) => ({ url: `${base}${path}`, lastModified: new Date("2026-07-25"), changeFrequency: ["/blog", "/publicacoes"].includes(path) ? "weekly" as const : "monthly" as const })), ...articles.map((article) => ({ url: `${base}/blog/${article.slug}`, lastModified: new Date("2026-07-22"), changeFrequency: "monthly" as const }))]; }
