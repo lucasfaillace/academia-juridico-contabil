@@ -1,56 +1,61 @@
-"use client";
-
 import Link from "next/link";
 import { Search, Tag, X } from "lucide-react";
-import { useMemo, useState } from "react";
 import { formatAuthorNames, type Article } from "@/lib/content";
 
-export function ArticleList({ articles, initialTag = "" }: { articles: Article[]; initialTag?: string }) {
-  const [query, setQuery] = useState("");
-  const [selectedTag, setSelectedTag] = useState(initialTag);
-  const selectedTagName = articles.flatMap((article) => article.tags).find((tag) => tag.slug === selectedTag)?.name;
-  const filtered = useMemo(() => {
-    const normalized = query.toLocaleLowerCase("pt-BR").trim();
-    return articles.filter((article) => {
-      const haystack = [
-        article.title,
-        article.summary,
-        ...(article.authors || [article.author]),
-        ...article.tags.map((tag) => tag.name),
-        article.searchText || article.contentHtml || "",
-      ].join(" ").replace(/<[^>]+>/g, " ").toLocaleLowerCase("pt-BR");
-      const matchesSearch = !normalized || haystack.includes(normalized);
-      const matchesTag = !selectedTag || article.tags.some((tag) => tag.slug === selectedTag);
-      return matchesSearch && matchesTag;
-    });
-  }, [articles, query, selectedTag]);
+type ArticleListProps = {
+  articles: Article[];
+  total: number;
+  page: number;
+  pageSize: number;
+  pageCount: number;
+  initialTag?: string;
+  query?: string;
+};
+
+function blogUrl({ page, query, tag }: { page?: number; query?: string; tag?: string }) {
+  const parameters = new URLSearchParams();
+  if (query?.trim()) parameters.set("q", query.trim());
+  if (tag?.trim()) parameters.set("tag", tag.trim());
+  if (page && page > 1) parameters.set("page", String(page));
+  const search = parameters.toString();
+  return search ? `/blog?${search}` : "/blog";
+}
+
+export function ArticleList({ articles, total, page, pageSize, pageCount, initialTag = "", query = "" }: ArticleListProps) {
+  const selectedTagName = articles.flatMap((article) => article.tags).find((tag) => tag.slug === initialTag)?.name;
+  const firstArticleNumber = (page - 1) * pageSize;
 
   return (
     <>
-      <div className="blog-tools">
+      <form className="blog-tools" action="/blog" method="get" role="search">
+        {initialTag && <input type="hidden" name="tag" value={initialTag} />}
         <label className="search-field">
           <span>Pesquisar no acervo</span>
-          <div><Search size={18} aria-hidden="true" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Pesquise no título, texto ou notas de rodapé" /></div>
+          <div>
+            <Search size={18} aria-hidden="true" />
+            <input name="q" defaultValue={query} maxLength={160} placeholder="Pesquise no título, texto ou notas de rodapé" />
+            <button type="submit">Pesquisar</button>
+          </div>
         </label>
-      </div>
-      {selectedTag && (
+      </form>
+      {initialTag && (
         <div className="active-tag-filter" aria-live="polite">
           <Tag size={14} aria-hidden="true" />
-          <span>Artigos com a tag <strong>{selectedTagName || selectedTag}</strong></span>
-          <button type="button" onClick={() => setSelectedTag("")}><X size={14} aria-hidden="true" />Remover filtro</button>
+          <span>Artigos com a tag <strong>{selectedTagName || initialTag}</strong></span>
+          <Link href={blogUrl({ query })}><X size={14} aria-hidden="true" />Remover filtro</Link>
         </div>
       )}
-      <p className="result-count" aria-live="polite">{filtered.length} {filtered.length === 1 ? "artigo encontrado" : "artigos encontrados"}</p>
+      <p className="result-count" aria-live="polite">{total} {total === 1 ? "artigo encontrado" : "artigos encontrados"}</p>
       <div className="article-list">
-        {filtered.map((article, index) => (
+        {articles.map((article, index) => (
           <article className="article-row" key={article.slug}>
-            <div className="article-index">{String(index + 1).padStart(2, "0")}</div>
+            <div className="article-index">{String(firstArticleNumber + index + 1).padStart(2, "0")}</div>
             <div>
               {article.tags.length > 0 && (
                 <ul className="article-tags article-list-tags" aria-label={`Tags de ${article.title}`}>
                   {article.tags.map((tag) => (
                     <li key={`${tag.kind}-${tag.slug}`}>
-                      <Link className={`tag-${tag.kind}`} href={`/blog?tag=${encodeURIComponent(tag.slug)}`}>
+                      <Link className={`tag-${tag.kind}`} href={blogUrl({ tag: tag.slug, query })}>
                         <Tag size={13} aria-hidden="true" />{tag.name}
                       </Link>
                     </li>
@@ -63,9 +68,19 @@ export function ArticleList({ articles, initialTag = "" }: { articles: Article[]
             </div>
           </article>
         ))}
-        {!filtered.length && <div className="empty-state"><h2>Nenhum artigo encontrado</h2><p>Experimente outro termo de pesquisa.</p></div>}
+        {!articles.length && <div className="empty-state"><h2>Nenhum artigo encontrado</h2><p>Experimente outro termo de pesquisa.</p></div>}
       </div>
-      <nav className="pagination" aria-label="Paginação"><button type="button" disabled>Anterior</button><span>Página 1 de 1</span><button type="button" disabled>Próxima</button></nav>
+      {pageCount > 1 && (
+        <nav className="pagination" aria-label="Paginação">
+          {page > 1
+            ? <Link href={blogUrl({ page: page - 1, query, tag: initialTag })} rel="prev">Anterior</Link>
+            : <span aria-disabled="true">Anterior</span>}
+          <span>Página {page} de {pageCount}</span>
+          {page < pageCount
+            ? <Link href={blogUrl({ page: page + 1, query, tag: initialTag })} rel="next">Próxima</Link>
+            : <span aria-disabled="true">Próxima</span>}
+        </nav>
+      )}
     </>
   );
 }

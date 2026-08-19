@@ -42,9 +42,9 @@ const nextConfig: NextConfig = {
       ] },
       { source: "/admin/:path*", headers: noStoreHeaders },
       { source: "/api/:path*", headers: noStoreHeaders },
+      { source: "/blog", headers: noStoreHeaders },
       { source: "/", headers: publicEdgeCacheHeaders },
-      { source: "/blog", headers: publicEdgeCacheHeaders },
-      { source: "/blog/:path*", headers: publicEdgeCacheHeaders },
+      { source: "/blog/:slug", headers: publicEdgeCacheHeaders },
       { source: "/publicacoes", headers: publicEdgeCacheHeaders },
     ];
   },

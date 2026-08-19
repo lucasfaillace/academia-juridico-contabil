@@ -2,11 +2,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, BookOpen } from "lucide-react";
 import { PageShell } from "@/components/PageShell";
-import { getPublishedArticles } from "@/lib/repository";
+import { getRecentPublishedArticles } from "@/lib/repository";
 export const revalidate = 60;
 
 export default async function Home() {
-  const articles = await getPublishedArticles();
+  const articles = await getRecentPublishedArticles(3);
   return (
     <PageShell>
       <section className="home-hero" aria-labelledby="home-title">
@@ -39,7 +39,7 @@ export default async function Home() {
             <Link className="button primary" href="/blog">Acessar o blog <ArrowRight size={15} aria-hidden="true" /></Link>
           </div>
           <div className="publication-grid">
-            {articles.slice(0, 3).map((article) => (
+            {articles.map((article) => (
               <article key={article.slug} className="publication-card">
                 <div className="publication-meta">
                   <time className="publication-date">{article.publishedAt}</time>

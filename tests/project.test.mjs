@@ -64,6 +64,8 @@ test("inclui controles de segurança e portabilidade", async () => {
   assert.match(articlePage, /replace\(\/<\/g, "\\\\u003c"\)/);
   assert.match(nextConfig, /Content-Security-Policy-Report-Only/);
   assert.match(nextConfig, /Cloudflare-CDN-Cache-Control/);
+  assert.match(nextConfig, /source: "\/blog", headers: noStoreHeaders/);
+  assert.match(nextConfig, /source: "\/blog\/:slug", headers: publicEdgeCacheHeaders/);
   assert.match(cloudflareCache, /CLOUDFLARE_CACHE_PURGE_ENABLED/);
   assert.match(cloudflareCache, /prefixes/);
   assert.match(cloudflareCache, /AbortSignal\.timeout/);
@@ -139,12 +141,13 @@ test("compartilha artigos com endereço completo e opções acessíveis", async 
 });
 
 test("inclui fórmulas, tags, pesquisa integral e sumário acadêmico", async () => {
-  const [editor, articleHtml, articleList, articlePage, styles] = await Promise.all([
+  const [editor, articleHtml, articleList, articlePage, styles, repository] = await Promise.all([
     readFile(new URL("components/RichEditor.tsx", root), "utf8"),
     readFile(new URL("lib/article-html.ts", root), "utf8"),
     readFile(new URL("components/ArticleList.tsx", root), "utf8"),
     readFile(new URL("components/ArticlePageView.tsx", root), "utf8"),
     readFile(new URL("app/globals.css", root), "utf8"),
+    readFile(new URL("lib/repository.ts", root), "utf8"),
   ]);
   assert.match(editor, /Inserir fórmula LaTeX/);
   assert.match(editor, /ArticleFormula/);
@@ -153,8 +156,9 @@ test("inclui fórmulas, tags, pesquisa integral e sumário acadêmico", async ()
   assert.match(articleHtml, /katex\.renderToString/);
   assert.match(articleHtml, /Vídeo explicativo/);
   assert.match(articleHtml, /Comentários/);
-  assert.match(articleList, /searchText/);
-  assert.match(articleList, /contentHtml/);
+  assert.match(articleList, /role="search"/);
+  assert.match(repository, /a\.content_html ILIKE/);
+  assert.match(repository, /br\.reference_text ILIKE/);
   assert.doesNotMatch(articleList, /category-filter/);
   assert.match(articlePage, /article-tags/);
   assert.match(styles, /tag-juridica/);
@@ -168,7 +172,7 @@ test("inclui fórmulas, tags, pesquisa integral e sumário acadêmico", async ()
 });
 
 test("centraliza tags, modera comentários e renderiza fórmulas no editor", async () => {
-  const [dashboard, tagsApi, commentsApi, editor, articlePage, articleList, styles] = await Promise.all([
+  const [dashboard, tagsApi, commentsApi, editor, articlePage, articleList, styles, repository] = await Promise.all([
     readFile(new URL("components/AdminDashboard.tsx", root), "utf8"),
     readFile(new URL("app/api/tags/route.ts", root), "utf8"),
     readFile(new URL("app/api/admin/comments/route.ts", root), "utf8"),
@@ -176,6 +180,7 @@ test("centraliza tags, modera comentários e renderiza fórmulas no editor", asy
     readFile(new URL("components/ArticlePageView.tsx", root), "utf8"),
     readFile(new URL("components/ArticleList.tsx", root), "utf8"),
     readFile(new URL("app/globals.css", root), "utf8"),
+    readFile(new URL("lib/repository.ts", root), "utf8"),
   ]);
   assert.match(dashboard, /Tags cadastradas/);
   assert.match(dashboard, /selectedTagSlugs/);
@@ -188,7 +193,8 @@ test("centraliza tags, modera comentários e renderiza fórmulas no editor", asy
   assert.match(editor, /ReactNodeViewRenderer/);
   assert.match(editor, /formula-live-preview/);
   assert.match(articlePage, /blog\?tag=/);
-  assert.match(articleList, /matchesTag/);
+  assert.match(articleList, /blogUrl\(\{ tag: tag\.slug/);
+  assert.match(repository, /selected_tag\.slug/);
   assert.match(styles, /\.footnote-number \{ font-variant-numeric:tabular-nums/);
   assert.match(styles, /scroll-padding-top:132px/);
   assert.match(styles, /li\[data-level="3"\] \{ margin-left:1\.2em/);
@@ -821,7 +827,7 @@ test("classifica os artigos por tags na listagem e mantém a página inicial enx
   assert.doesNotMatch(dashboard, /<label>Categoria/);
   assert.match(articlePage, /<p className="eyebrow">Artigo<\/p>/);
   assert.match(articleList, /article\.tags\.map/);
-  assert.match(articleList, /href=\{`\/blog\?tag=/);
+  assert.match(articleList, /blogUrl\(\{ tag: tag\.slug/);
   assert.doesNotMatch(articleList, /<p className="eyebrow">Artigo<\/p>/);
   assert.doesNotMatch(articleList, /article\.category/);
   assert.doesNotMatch(home, /article\.tags\.map/);
@@ -852,4 +858,24 @@ test("normaliza cada upload em somente duas versões WebP proporcionais", async 
   assert.match(editor, /mobileSrc: uploaded\.mobileUrl/);
   assert.match(articleRoute, /"picture", "source"/);
   assert.match(exporter, /findAll\(element\.children,[\s\S]*node\.name === "img"/);
+});
+
+test("pagina e pesquisa o Blog no servidor sem carregar todos os artigos", async () => {
+  const [repository, blogPage, articleList, home] = await Promise.all([
+    readFile(new URL("lib/repository.ts", root), "utf8"),
+    readFile(new URL("app/blog/page.tsx", root), "utf8"),
+    readFile(new URL("components/ArticleList.tsx", root), "utf8"),
+    readFile(new URL("app/page.tsx", root), "utf8"),
+  ]);
+  assert.match(repository, /getPublishedArticlePage/);
+  assert.match(repository, /LIMIT \$\$\{values\.length \+ 1\} OFFSET \$\$\{values\.length \+ 2\}/);
+  assert.match(repository, /br\.reference_text ILIKE/);
+  assert.match(repository, /a\.content_html ILIKE/);
+  assert.match(repository, /a\.slug=\$1 LIMIT 1/);
+  assert.doesNotMatch(repository, /getPublishedArticle\(slug: string\)[\s\S]{0,160}getPublishedArticles/);
+  assert.match(blogPage, /pageSize: 12/);
+  assert.match(articleList, /method="get" role="search"/);
+  assert.match(articleList, /rel="prev"/);
+  assert.match(articleList, /rel="next"/);
+  assert.match(home, /getRecentPublishedArticles\(3\)/);
 });

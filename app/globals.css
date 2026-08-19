@@ -116,6 +116,7 @@ p { margin:0 0 1.2em; }
 .search-field>span { display:block; margin-bottom:8px; font-size:.84rem; font-weight:750; }
 .search-field>div { display:flex; align-items:center; gap:10px; border:1px solid #aeb8c7; padding:0 14px; }
 .search-field input { width:100%; min-height:48px; border:0; outline:0; }
+.search-field button { align-self:stretch; margin-right:-14px; padding:0 16px; border:0; border-left:1px solid var(--line); background:var(--blue-950); color:#fff; font-weight:750; }
 .category-filter { display:flex; flex-wrap:wrap; gap:7px; }
 .category-filter button { padding:8px 12px; border:1px solid var(--line); background:#fff; color:#465166; }
 .category-filter button[aria-pressed="true"] { border-color:var(--blue-900); background:var(--blue-900); color:#fff; }
@@ -128,7 +129,8 @@ p { margin:0 0 1.2em; }
 .article-row>div:last-child>p:not(.eyebrow) { max-width:800px; color:#4e5969; }
 .empty-state { padding:50px 0; }
 .pagination { display:flex; align-items:center; justify-content:center; gap:24px; margin-top:48px; }
-.pagination button { padding:8px 14px; border:1px solid var(--line); background:#fff; }
+.pagination a,.pagination>span[aria-disabled="true"] { padding:8px 14px; border:1px solid var(--line); background:#fff; color:var(--blue-900); text-decoration:none; }
+.pagination>span[aria-disabled="true"] { color:var(--muted); opacity:.6; }
 .article-hero { padding:38px 0 32px; border-bottom:1px solid var(--line); background:var(--mist); }
 .reading-width { max-width:760px; }
 .back-link { display:inline-block; margin-bottom:18px; color:var(--blue-700); font-size:.82rem; font-weight:700; }
@@ -147,7 +149,7 @@ p { margin:0 0 1.2em; }
 .article-tags a:hover { filter:brightness(.97); text-decoration:underline; }
 .article-list-tags { margin:0 0 12px; }
 .active-tag-filter { display:flex; align-items:center; gap:8px; margin:14px 0 0; padding:9px 11px; border:1px solid #d7cfc0; background:#faf8f3; color:#514b40; font-size:.78rem; }
-.active-tag-filter button { display:inline-flex; align-items:center; gap:4px; margin-left:auto; padding:3px 5px; border:0; background:transparent; color:#765243; font-weight:700; }
+.active-tag-filter a { display:inline-flex; align-items:center; gap:4px; margin-left:auto; padding:3px 5px; color:#765243; font-weight:700; text-decoration:none; }
 .article-layout { max-width:760px; padding-block:38px 52px; }
 .article-content { min-width:0; font-family:var(--serif); font-size:1rem; line-height:1.68; }
 .article-content>div>p { margin-bottom:1em; }
