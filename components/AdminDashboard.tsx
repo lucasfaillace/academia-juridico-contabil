@@ -205,6 +205,10 @@ export function AdminDashboard({
   const [accountPasswordConfirmation, setAccountPasswordConfirmation] = useState("");
   const [accountStatus, setAccountStatus] = useState("");
   const [accountLoading, setAccountLoading] = useState(false);
+  const [analyticsEnabled, setAnalyticsEnabled] = useState(false);
+  const [analyticsMeasurementId, setAnalyticsMeasurementId] = useState("");
+  const [analyticsStatus, setAnalyticsStatus] = useState("");
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
   const loadArticles = useCallback(async () => {
     setLoadingArticles(true);
@@ -271,6 +275,20 @@ export function AdminDashboard({
     }
   }, []);
 
+  const loadAnalyticsSettings = useCallback(async () => {
+    setAnalyticsLoading(true);
+    const response = await fetch("/api/admin/analytics", { cache: "no-store" });
+    const data = await response.json();
+    setAnalyticsLoading(false);
+    if (response.ok) {
+      setAnalyticsEnabled(data.enabled === true);
+      setAnalyticsMeasurementId(data.measurementId || "");
+      setAnalyticsStatus("");
+    } else {
+      setAnalyticsStatus(data.error || "Não foi possível carregar a configuração do Google Analytics.");
+    }
+  }, []);
+
   async function updateAccount(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setAccountStatus("");
@@ -296,6 +314,28 @@ export function AdminDashboard({
     }
     setAccountStatus("Credenciais atualizadas. Entre novamente com os novos dados.");
     window.setTimeout(() => { window.location.href = "/admin/login"; }, 900);
+  }
+
+  async function updateAnalyticsSettings(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setAnalyticsStatus("");
+    setAnalyticsLoading(true);
+    const response = await fetch("/api/admin/analytics", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ enabled: analyticsEnabled, measurementId: analyticsMeasurementId }),
+    });
+    const data = await response.json();
+    setAnalyticsLoading(false);
+    if (!response.ok) {
+      setAnalyticsStatus(data.error || "Não foi possível salvar a configuração do Google Analytics.");
+      return;
+    }
+    setAnalyticsEnabled(data.enabled === true);
+    setAnalyticsMeasurementId(data.measurementId || "");
+    setAnalyticsStatus(data.enabled
+      ? "Google Analytics 4 configurado. A coleta continuará condicionada ao consentimento do visitante."
+      : "Google Analytics 4 desativado.");
   }
 
   useEffect(() => {
@@ -1196,7 +1236,10 @@ export function AdminDashboard({
                     void loadReferences();
                     void loadFichamentoTopics();
                   }
-                  if (id === "settings") void loadAccount();
+                  if (id === "settings") {
+                    void loadAccount();
+                    void loadAnalyticsSettings();
+                  }
                 }
               }}
             >
@@ -2479,6 +2522,41 @@ export function AdminDashboard({
                   {accountLoading ? "Salvando…" : "Atualizar credenciais"}
                 </button>
                 {accountStatus && <p className="form-status" aria-live="polite">{accountStatus}</p>}
+              </form>
+            </section>
+            <section className="admin-section account-settings analytics-settings">
+              <div>
+                <h2>Google Analytics 4</h2>
+                <p>Configure a medição geral do tráfego. O sistema interno de visualizações permanece independente e uma sessão administrativa autenticada nunca é enviada ao Google Analytics.</p>
+              </div>
+              <form onSubmit={updateAnalyticsSettings}>
+                <label className="analytics-enabled-control">
+                  <input
+                    type="checkbox"
+                    checked={analyticsEnabled}
+                    onChange={(event) => setAnalyticsEnabled(event.target.checked)}
+                  />
+                  <span>Ativar Google Analytics 4</span>
+                </label>
+                <label>
+                  ID de medição
+                  <input
+                    type="text"
+                    value={analyticsMeasurementId}
+                    onChange={(event) => setAnalyticsMeasurementId(event.target.value.toUpperCase())}
+                    placeholder="G-XXXXXXXXXX"
+                    pattern="G-[A-Za-z0-9]+"
+                    maxLength={40}
+                    required={analyticsEnabled}
+                    spellCheck={false}
+                    autoCapitalize="characters"
+                  />
+                </label>
+                <p className="account-password-guidance">O código do Google somente será carregado após o visitante aceitar as estatísticas e nunca será carregado em endereços iniciados por <code>/admin</code>.</p>
+                <button className="button primary" disabled={analyticsLoading}>
+                  {analyticsLoading ? "Salvando…" : "Salvar Google Analytics"}
+                </button>
+                {analyticsStatus && <p className="form-status" aria-live="polite">{analyticsStatus}</p>}
               </form>
             </section>
           </>

@@ -6,6 +6,7 @@ import { getPool, hasDatabaseConfig } from "@/lib/db";
 import { listStoredArticles, usesFileContentFallback } from "@/lib/preview-store";
 import { buildStatistics, type StatisticsPeriod } from "@/lib/statistics";
 import { listPreviewViewPoints } from "@/lib/statistics-store";
+import { getAnalyticsSettings } from "@/lib/analytics-settings";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,9 +41,10 @@ export async function GET(request: Request) {
       articles = articleResult.rows;
       points = pointResult.rows.map((row) => ({ slug: row.slug, date: row.date, views: Number(row.views) }));
     }
+    const analyticsSettings = await getAnalyticsSettings();
     return NextResponse.json({
       ...buildStatistics(articles, points, period),
-      ga4Configured: /^G-[A-Z0-9]+$/i.test(process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID || ""),
+      ga4Configured: analyticsSettings.enabled,
     }, { headers: { "cache-control": "private, no-store, max-age=0" } });
   } catch (error) {
     console.error("statistics_load_failed", error instanceof Error ? error.message : "unknown");

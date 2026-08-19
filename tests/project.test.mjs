@@ -933,3 +933,35 @@ test("permite alterar as credenciais administrativas sem armazenar senha em text
   assert.match(dashboard, /Atualizar credenciais/);
   assert.match(deployment, /Configurações → Conta administrativa/);
 });
+
+test("configura o GA4 pelo painel e exclui integralmente a administração da medição", async () => {
+  const [settingsStore, adminRoute, publicRoute, consent, dashboard, statistics, dockerfile, compose, deployment] = await Promise.all([
+    readFile(new URL("lib/analytics-settings.ts", root), "utf8"),
+    readFile(new URL("app/api/admin/analytics/route.ts", root), "utf8"),
+    readFile(new URL("app/api/analytics/config/route.ts", root), "utf8"),
+    readFile(new URL("components/AnalyticsConsent.tsx", root), "utf8"),
+    readFile(new URL("components/AdminDashboard.tsx", root), "utf8"),
+    readFile(new URL("app/api/admin/statistics/route.ts", root), "utf8"),
+    readFile(new URL("Dockerfile", root), "utf8"),
+    readFile(new URL("docker-compose.yml", root), "utf8"),
+    readFile(new URL("DEPLOYMENT.md", root), "utf8"),
+  ]);
+  assert.match(settingsStore, /INSERT INTO settings\(key,value,updated_at\)/);
+  assert.match(settingsStore, /NEXT_PUBLIC_GA_MEASUREMENT_ID/);
+  assert.match(adminRoute, /verifySession/);
+  assert.match(adminRoute, /crossOriginMutationResponse/);
+  assert.match(adminRoute, /validAnalyticsMeasurementId/);
+  assert.match(publicRoute, /private, no-store/);
+  assert.match(publicRoute, /verifySession/);
+  assert.match(publicRoute, /enabled: false, measurementId: ""/);
+  assert.match(consent, /pathname !== "\/admin" && !pathname\.startsWith\("\/admin\/"\)/);
+  assert.match(consent, /consent !== "granted" \|\| !analyticsAllowedPath/);
+  assert.match(consent, /fetch\("\/api\/analytics\/config", \{ cache: "no-store" \}\)/);
+  assert.match(consent, /if \(!analyticsAllowedPath\) return null/);
+  assert.match(dashboard, /Google Analytics 4/);
+  assert.match(dashboard, /Salvar Google Analytics/);
+  assert.match(statistics, /getAnalyticsSettings/);
+  assert.doesNotMatch(dockerfile, /ARG NEXT_PUBLIC_GA_MEASUREMENT_ID/);
+  assert.equal(compose.split("\n").filter((line) => line.includes("NEXT_PUBLIC_GA_MEASUREMENT_ID")).length, 1);
+  assert.match(deployment, /nunca é carregado em `\/admin`/);
+});

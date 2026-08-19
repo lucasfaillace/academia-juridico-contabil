@@ -85,7 +85,7 @@ nano .env
 Use a primeira saída em `POSTGRES_PASSWORD`, a segunda em `AUTH_SECRET` e a terceira em `ANALYTICS_HASH_SECRET`. Configure:
 
 - `NEXT_PUBLIC_SITE_URL=https://academia.seudominio.br`;
-- `NEXT_PUBLIC_GA_MEASUREMENT_ID=G-XXXXXXXXXX` (opcional; identificador do Google Analytics 4);
+- `NEXT_PUBLIC_GA_MEASUREMENT_ID=G-XXXXXXXXXX` (opcional; fallback inicial do Google Analytics 4);
 - `ANALYTICS_HASH_SECRET=` com o terceiro segredo gerado;
 - PostgreSQL (`POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`);
 - administrador (`ADMIN_EMAIL`; o hash será criado no passo 7);
@@ -143,6 +143,8 @@ docker compose up -d --force-recreate app
 O login estará em `https://academia.seudominio.br/admin/login` depois da configuração do domínio e SSL.
 
 A senha deve conter pelo menos 12 caracteres. Depois do primeiro acesso, o administrador pode alterar o e-mail e a senha em **Configurações → Conta administrativa**. A alteração exige a senha atual, grava somente um hash `scrypt` no PostgreSQL, invalida as sessões existentes e exige novo login. As variáveis `ADMIN_EMAIL` e `ADMIN_PASSWORD_HASH` permanecem no `.env` apenas como credencial inicial e recuperação quando ainda não houver uma credencial gravada no banco.
+
+O Google Analytics 4 pode ser ativado em **Configurações → Google Analytics 4**. Informe o ID `G-...` e salve; a alteração fica no PostgreSQL e passa a valer nas páginas públicas sem novo build. A variável `NEXT_PUBLIC_GA_MEASUREMENT_ID` permanece opcional como fallback quando não houver configuração salva. O script do Google somente é carregado depois do consentimento do visitante, nunca é carregado em `/admin`, `/admin/login` ou prévias administrativas e também permanece desativado nas páginas públicas enquanto houver uma sessão administrativa autenticada.
 
 ## 8. Configurar o domínio no Nginx
 
@@ -401,7 +403,8 @@ curl -fsS http://127.0.0.1:3000/api/health
 - [ ] Publicação de artigo, notas de rodapé e persistência após reinício foram testadas.
 - [ ] Consentimento de estatísticas foi testado nas opções aceitar, recusar e rever preferências.
 - [ ] A área administrativa de estatísticas registra acessos públicos, mas ignora acessos do administrador.
-- [ ] Se o GA4 for utilizado, `NEXT_PUBLIC_GA_MEASUREMENT_ID` contém o identificador `G-...` correto.
+- [ ] Se o GA4 for utilizado, o painel mostra a integração ativa com o identificador `G-...` correto (ou o fallback `NEXT_PUBLIC_GA_MEASUREMENT_ID` está configurado).
+- [ ] O GA4 foi testado em página pública e não envia acessos a `/admin`, `/admin/login` nem às prévias administrativas.
 - [ ] Se a Cloudflare for utilizada, SSL está em `Full (strict)` e nenhuma regra global de `Cache Everything` alcança `/admin`, `/api` ou `/blog`.
 - [ ] Se a limpeza automática da Cloudflare for utilizada, o token tem somente `Cache Purge` na zona correta e não está no Git.
 - [ ] A busca do Blog responde com `no-store`; páginas públicas cacheáveis são atualizadas após uma publicação.

@@ -359,8 +359,11 @@ th { background:#edf2f8; color:var(--blue-950); }
 .account-settings label small { color:var(--muted); font-weight:500; }
 .account-settings input { width:100%; margin-top:6px; padding:11px 12px; border:1px solid #aeb8c7; background:#fff; color:var(--ink); }
 .account-password-guidance { margin:0; color:var(--muted); font-size:.72rem; line-height:1.5; }
+.account-password-guidance code { color:var(--blue-900); font-size:.7rem; }
 .account-settings .button { justify-self:start; }
 .account-settings .form-status { margin:0; color:var(--muted); font-size:.76rem; }
+.analytics-enabled-control { display:flex; align-items:center; gap:9px; }
+.account-settings .analytics-enabled-control input { width:auto; margin:0; accent-color:var(--blue-700); }
 .text-button { border:0; background:transparent; color:var(--blue-700); font-size:.82rem; font-weight:750; }
 .recent-admin-article { width:100%; display:flex; align-items:center; justify-content:space-between; gap:20px; padding:11px 0; border:0; border-top:1px solid var(--line); background:transparent; color:var(--ink); text-align:left; }
 .recent-admin-article small { flex:none; color:var(--muted); }

@@ -60,7 +60,6 @@ services:
       context: .
       args:
         NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:?Defina NEXT_PUBLIC_SITE_URL no .env}
-        NEXT_PUBLIC_GA_MEASUREMENT_ID: ${NEXT_PUBLIC_GA_MEASUREMENT_ID:-}
     image: academia-juridico-contabil:${APP_IMAGE_TAG:-local}
     restart: "no"
     command: ["node", "scripts/migrate.mjs"]
@@ -77,7 +76,6 @@ services:
       context: .
       args:
         NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:?Defina NEXT_PUBLIC_SITE_URL no .env}
-        NEXT_PUBLIC_GA_MEASUREMENT_ID: ${NEXT_PUBLIC_GA_MEASUREMENT_ID:-}
     image: academia-juridico-contabil:${APP_IMAGE_TAG:-local}
     restart: unless-stopped
     init: true
