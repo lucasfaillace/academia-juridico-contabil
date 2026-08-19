@@ -209,6 +209,77 @@ Se não usar `www`, retire o segundo `-d` e remova esse nome do `server_name`. C
 curl -fsSI https://academia.seudominio.br
 ```
 
+### 11.1. Cloudflare Free (opcional)
+
+O site não depende da Cloudflare. Ele continua funcionando com DNS comum e acesso direto ao Nginx. Se usar o plano gratuito, configure a Cloudflare somente depois que o HTTPS do passo 11 estiver válido no servidor de origem.
+
+1. Adicione o domínio à Cloudflare e importe os registros DNS.
+2. Mantenha os registros `A`/`AAAA` do site como **Proxied** (nuvem laranja).
+3. Em **SSL/TLS > Overview**, selecione **Full (strict)**. Não use o modo Flexible.
+4. Em **SSL/TLS > Edge Certificates**, ative **Always Use HTTPS**.
+5. Em **Caching > Cache Rules**, não crie uma regra “Cache Everything” para o domínio inteiro.
+6. Crie uma regra denominada `Páginas públicas da Academia` com a expressão:
+
+```text
+(http.request.method eq "GET" and (
+  http.request.uri.path eq "/" or
+  starts_with(http.request.uri.path, "/blog/") or
+  http.request.uri.path eq "/publicacoes"
+))
+```
+
+Na ação, escolha **Eligible for cache** e, em **Edge TTL**, **Use cache-control header if present, bypass cache if not**. A aplicação define cinco minutos para essas páginas e invalida o endereço alterado após publicação. `/blog` (busca, filtros e paginação), `/admin` e `/api` enviam `no-store` e não devem ser incluídos nessa regra.
+
+As regras oficiais de cache são documentadas em [Cache Rules settings](https://developers.cloudflare.com/cache/how-to/cache-rules/settings/), o modo TLS em [Full (strict)](https://developers.cloudflare.com/ssl/origin-configuration/ssl-modes/full-strict/) e a limpeza em [Purge cache](https://developers.cloudflare.com/cache/how-to/purge-cache/).
+
+#### Limpeza automática após alterações
+
+Crie um API Token restrito à zona, com apenas a permissão **Zone > Cache Purge**. Copie o Zone ID da página de visão geral do domínio e configure no `.env`:
+
+```dotenv
+CLOUDFLARE_CACHE_PURGE_ENABLED=true
+CLOUDFLARE_ZONE_ID=IDENTIFICADOR_DA_ZONA
+CLOUDFLARE_API_TOKEN=TOKEN_RESTRITO
+```
+
+Recrie somente a aplicação:
+
+```bash
+cd /opt/academia/app
+docker compose up -d --force-recreate app
+```
+
+Ao salvar ou excluir artigos, publicações, tags e referências vinculadas, a aplicação limpa apenas as URLs ou prefixos afetados. Se as variáveis estiverem ausentes ou a Cloudflare estiver desativada, a publicação continua normalmente e o cache expira pelo TTL; a integração nunca bloqueia a gravação.
+
+Para uma limpeza manual emergencial, use **Caching > Configuration > Purge Cache** no painel. Prefira URLs específicas; use **Purge Everything** somente quando necessário.
+
+#### IP real do visitante no Nginx
+
+Sem esta etapa, o Nginx enxerga o IP do proxy da Cloudflare. A lista deve vir dos endereços oficiais da Cloudflare e só deve ser instalada se o proxy estiver em uso:
+
+```bash
+CF_REAL_IP_FILE="$(mktemp)"
+curl -fsS https://www.cloudflare.com/ips-v4 | sed 's/^/set_real_ip_from /; s/$/;/' > "$CF_REAL_IP_FILE"
+curl -fsS https://www.cloudflare.com/ips-v6 | sed 's/^/set_real_ip_from /; s/$/;/' >> "$CF_REAL_IP_FILE"
+printf '%s\n' 'real_ip_header CF-Connecting-IP;' 'real_ip_recursive on;' >> "$CF_REAL_IP_FILE"
+sudo install -m 0644 "$CF_REAL_IP_FILE" /etc/nginx/conf.d/cloudflare-real-ip.conf
+rm -f "$CF_REAL_IP_FILE"
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+Atualize esse arquivo quando a Cloudflare alterar suas faixas oficiais. Não aceite `CF-Connecting-IP` de qualquer origem sem restringir `set_real_ip_from`. A referência é [Restoring original visitor IPs](https://developers.cloudflare.com/support/troubleshooting/restoring-visitor-ips/restoring-original-visitor-ips/).
+
+Valide a política sem expor credenciais:
+
+```bash
+curl -fsSI https://academia.seudominio.br/
+curl -fsSI 'https://academia.seudominio.br/blog?q=contabilidade'
+curl -fsSI https://academia.seudominio.br/admin/login
+```
+
+Na primeira URL pública, `CF-Cache-Status` pode começar como `MISS` e depois mudar para `HIT`. Busca, painel e API devem permanecer `DYNAMIC`/`BYPASS` e apresentar `Cache-Control: private, no-store` quando aplicável.
+
 ## 12. Consultar logs e saúde
 
 ```bash
@@ -329,6 +400,9 @@ curl -fsS http://127.0.0.1:3000/api/health
 - [ ] Consentimento de estatísticas foi testado nas opções aceitar, recusar e rever preferências.
 - [ ] A área administrativa de estatísticas registra acessos públicos, mas ignora acessos do administrador.
 - [ ] Se o GA4 for utilizado, `NEXT_PUBLIC_GA_MEASUREMENT_ID` contém o identificador `G-...` correto.
+- [ ] Se a Cloudflare for utilizada, SSL está em `Full (strict)` e nenhuma regra global de `Cache Everything` alcança `/admin`, `/api` ou `/blog`.
+- [ ] Se a limpeza automática da Cloudflare for utilizada, o token tem somente `Cache Purge` na zona correta e não está no Git.
+- [ ] A busca do Blog responde com `no-store`; páginas públicas cacheáveis são atualizadas após uma publicação.
 - [ ] Formulário de contato envia para o destinatário correto.
 - [ ] Backup foi criado, copiado para fora da VPS e restaurado em teste.
 - [ ] Páginas provisórias, privacidade e termos foram revisados.

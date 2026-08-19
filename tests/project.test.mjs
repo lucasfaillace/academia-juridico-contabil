@@ -878,3 +878,23 @@ test("pagina e pesquisa o Blog no servidor sem carregar todos os artigos", async
   assert.match(articleList, /rel="next"/);
   assert.match(home, /getRecentPublishedArticles\(3\)/);
 });
+
+test("endurece o Nginx e documenta a Cloudflare gratuita como opcional", async () => {
+  const [nginx, deployment, env, packageJson] = await Promise.all([
+    readFile(new URL("nginx/academia.conf.example", root), "utf8"),
+    readFile(new URL("DEPLOYMENT.md", root), "utf8"),
+    readFile(new URL(".env.example", root), "utf8"),
+    readFile(new URL("package.json", root), "utf8"),
+  ]);
+  assert.match(nginx, /gzip on/);
+  assert.match(nginx, /location = \/api\/auth\/login/);
+  assert.match(nginx, /proxy_set_header X-Forwarded-For \$remote_addr/);
+  assert.match(nginx, /location \/media\//);
+  assert.match(deployment, /Cloudflare Free \(opcional\)/);
+  assert.match(deployment, /Full \(strict\)/);
+  assert.match(deployment, /Use cache-control header if present, bypass cache if not/);
+  assert.match(deployment, /continua normalmente/);
+  assert.match(deployment, /real_ip_header CF-Connecting-IP/);
+  assert.match(env, /CLOUDFLARE_CACHE_PURGE_ENABLED=false/);
+  assert.doesNotMatch(packageJson, /cloudflare/i);
+});
