@@ -33,7 +33,7 @@
     "katex": "^0.18.1",
     "lucide-react": "^1.25.0",
     "mammoth": "^1.12.0",
-    "next": "16.2.6",
+    "next": "16.2.12",
     "nodemailer": "^9.0.3",
     "pg": "^8.22.0",
     "react": "19.2.6",
@@ -51,7 +51,7 @@
     "@types/react-dom": "19.2.3",
     "@types/sanitize-html": "^2.16.1",
     "eslint": "9.39.4",
-    "eslint-config-next": "16.2.6",
+    "eslint-config-next": "16.2.12",
     "tailwindcss": "4.2.1",
     "typescript": "5.9.3"
   },

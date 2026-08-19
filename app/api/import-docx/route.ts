@@ -4,9 +4,12 @@ import mammoth from "mammoth";
 import sanitizeHtml from "sanitize-html";
 import { verifySession } from "@/lib/auth";
 import { getStorage } from "@/lib/storage";
+import { crossOriginMutationResponse } from "@/lib/request-security";
 
 const maxBytes = 15 * 1024 * 1024;
 export async function POST(request: Request) {
+  const originError = crossOriginMutationResponse(request);
+  if (originError) return originError;
   if (!verifySession((await cookies()).get("academia_session")?.value)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const form = await request.formData(); const file = form.get("file");
   if (!(file instanceof File) || file.size === 0 || file.size > maxBytes || !file.name.toLowerCase().endsWith(".docx")) return NextResponse.json({ error: "Envie um arquivo .docx válido de até 15 MB." }, { status: 400 });
@@ -15,7 +18,19 @@ export async function POST(request: Request) {
   try {
     const originalKey = await getStorage().saveOriginal(file.name, buffer);
     const result = await mammoth.convertToHtml({ buffer }, { convertImage: mammoth.images.imgElement(async (image) => ({ src: `data:${image.contentType};base64,${(await image.read("base64"))}` })) });
-    const clean = sanitizeHtml(result.value, { allowedTags: sanitizeHtml.defaults.allowedTags.concat(["img", "table", "thead", "tbody", "tfoot", "tr", "th", "td", "caption", "sup", "sub", "u"]), allowedAttributes: { a: ["href", "name", "id"], img: ["src", "alt", "title"], "*": ["id"] }, allowedSchemes: ["http", "https", "mailto", "data"] });
+    const clean = sanitizeHtml(result.value, {
+      allowedTags: sanitizeHtml.defaults.allowedTags.concat(["img", "table", "thead", "tbody", "tfoot", "tr", "th", "td", "caption", "sup", "sub", "u"]),
+      allowedAttributes: { a: ["href", "name", "id"], img: ["src", "alt", "title"], "*": ["id"] },
+      allowedSchemes: ["http", "https", "mailto"],
+      allowedSchemesByTag: { img: ["data"] },
+      transformTags: {
+        a: (_tagName, attributes) => ({ tagName: "a", attribs: { ...attributes, rel: "noopener noreferrer" } }),
+        img: (_tagName, attributes) => {
+          const safe = /^data:image\/(?:jpeg|png|webp);base64,/i.test(attributes.src || "");
+          return { tagName: "img", attribs: safe ? attributes : {} };
+        },
+      },
+    });
     return NextResponse.json({ html: clean, originalKey, messages: result.messages.map((item) => item.message) });
   } catch { return NextResponse.json({ error: "Não foi possível converter o documento. O arquivo foi rejeitado com segurança." }, { status: 422 }); }
 }

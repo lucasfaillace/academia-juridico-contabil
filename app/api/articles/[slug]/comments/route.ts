@@ -1,33 +1,17 @@
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { verifySession } from "@/lib/auth";
 import { listPreviewComments, savePreviewComment } from "@/lib/comment-store";
 import { getPool, hasDatabaseConfig } from "@/lib/db";
 import { usesFileContentFallback } from "@/lib/preview-store";
+import { consumeRateLimit, crossOriginMutationResponse, requestAddress } from "@/lib/request-security";
 
 const commentSchema = z.object({
   authorName: z.string().trim().min(2).max(100),
   body: z.string().trim().min(2).max(4000),
   parentId: z.string().uuid().optional(),
 });
-
-type RateEntry = { count: number; expiresAt: number };
-declare global { var academiaCommentRate: Map<string, RateEntry> | undefined; }
-
-function allowRequest(key: string) {
-  const now = Date.now();
-  const rates = global.academiaCommentRate || new Map<string, RateEntry>();
-  global.academiaCommentRate = rates;
-  const entry = rates.get(key);
-  if (!entry || entry.expiresAt < now) {
-    rates.set(key, { count: 1, expiresAt: now + 60_000 });
-    return true;
-  }
-  if (entry.count >= 5) return false;
-  entry.count += 1;
-  return true;
-}
 
 function publicComment(comment: Record<string, unknown>) {
   return {
@@ -63,11 +47,15 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ slug: string }> }) {
+  const originError = crossOriginMutationResponse(request);
+  if (originError) return originError;
   const { slug } = await params;
-  const requestHeaders = await headers();
-  const address = requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() || requestHeaders.get("x-real-ip") || "local";
-  if (!allowRequest(address)) {
-    return NextResponse.json({ error: "Aguarde um minuto antes de enviar outro comentário." }, { status: 429 });
+  const rate = consumeRateLimit("article-comment", requestAddress(request), { limit: 5, windowMs: 60_000 });
+  if (!rate.allowed) {
+    return NextResponse.json(
+      { error: "Aguarde um minuto antes de enviar outro comentário." },
+      { status: 429, headers: { "retry-after": String(rate.retryAfter) } },
+    );
   }
 
   const parsed = commentSchema.safeParse(await request.json());

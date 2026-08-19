@@ -7,6 +7,7 @@ import { verifySession } from "@/lib/auth";
 import { getPool, hasDatabaseConfig } from "@/lib/db";
 import { deleteStoredPublication, listStoredPublications, saveStoredPublication } from "@/lib/publication-store";
 import { usesFileContentFallback } from "@/lib/preview-store";
+import { crossOriginMutationResponse } from "@/lib/request-security";
 
 const publicationSchema = z.object({
   id: z.string().uuid().optional(),
@@ -65,6 +66,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const originError = crossOriginMutationResponse(request);
+  if (originError) return originError;
   if (!authenticated((await cookies()).get("academia_session")?.value)) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   }
@@ -106,6 +109,8 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const originError = crossOriginMutationResponse(request);
+  if (originError) return originError;
   if (!authenticated((await cookies()).get("academia_session")?.value)) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   }

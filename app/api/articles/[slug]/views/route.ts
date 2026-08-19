@@ -6,6 +6,7 @@ import { getPool, hasDatabaseConfig } from "@/lib/db";
 import { listStoredArticles, usesFileContentFallback } from "@/lib/preview-store";
 import { viewDateInBahia } from "@/lib/statistics";
 import { savePreviewView } from "@/lib/statistics-store";
+import { crossOriginMutationResponse } from "@/lib/request-security";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,6 +26,8 @@ function dedupeKey(slug: string, visitorId: string) {
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ slug: string }> }) {
+  const originError = crossOriginMutationResponse(request);
+  if (originError) return originError;
   const { slug } = await params;
   if (!validSlug(slug)) return NextResponse.json({ counted: false }, { status: 400 });
   if (request.headers.get("x-analytics-consent") !== "granted") {

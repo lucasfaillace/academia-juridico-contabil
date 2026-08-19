@@ -10,6 +10,7 @@ import { deletePreviewCommentsForArticle } from "@/lib/comment-store";
 import { getPool, hasDatabaseConfig } from "@/lib/db";
 import { deleteStoredArticle, listStoredArticles, saveStoredArticle, usesFileContentFallback } from "@/lib/preview-store";
 import { listPreviewTags } from "@/lib/tag-store";
+import { crossOriginMutationResponse } from "@/lib/request-security";
 
 function isYouTubeUrl(value: string) {
   if (!value) return true;
@@ -48,11 +49,12 @@ function authenticated(token: string | undefined) {
 
 function sanitizeContent(content: string) {
   return sanitizeHtml(content, {
-    allowedTags: sanitizeHtml.defaults.allowedTags.concat(["img", "figure", "figcaption", "table", "thead", "tbody", "tfoot", "tr", "th", "td", "caption", "sup", "sub", "u", "section"]),
+    allowedTags: sanitizeHtml.defaults.allowedTags.concat(["img", "picture", "source", "figure", "figcaption", "table", "thead", "tbody", "tfoot", "tr", "th", "td", "caption", "sup", "sub", "u", "section"]),
     allowedAttributes: {
       a: ["href", "id", "aria-label", "class", "target", "rel"],
-      img: ["src", "alt", "title"],
-      figure: ["data-article-image", "data-image-width", "data-image-align", "data-image-fit", "data-image-zoom", "data-image-border", "data-image-original-src", "data-image-trimmed-src"],
+      img: ["src", "alt", "title", "width", "height", "loading", "decoding"],
+      source: ["srcset", "media", "type", "width", "height"],
+      figure: ["data-article-image", "data-image-width", "data-image-align", "data-image-fit", "data-image-zoom", "data-image-border", "data-image-original-src", "data-image-mobile-src", "data-image-trimmed-src"],
       div: ["data-article-toc", "data-article-formula", "data-latex", "data-display", "data-image-frame"],
       sup: [
         "id",
@@ -68,9 +70,30 @@ function sanitizeContent(content: string) {
       section: ["id", "class"],
       "*": ["id", "class"],
     },
-    allowedSchemes: ["http", "https", "mailto", "data"],
+    allowedSchemes: ["http", "https", "mailto"],
+    allowedSchemesByTag: { img: ["http", "https", "data"] },
     transformTags: {
       h1: "h2",
+      a: (_tagName, attributes) => ({
+        tagName: "a",
+        attribs: attributes.target === "_blank"
+          ? { ...attributes, rel: "noopener noreferrer" }
+          : attributes,
+      }),
+      img: (_tagName, attributes) => {
+        const dataSourceIsSafe = !attributes.src?.startsWith("data:")
+          || /^data:image\/(?:jpeg|png|webp);base64,/i.test(attributes.src);
+        const safeAttributes = { ...attributes };
+        if (!dataSourceIsSafe) delete safeAttributes.src;
+        return {
+          tagName: "img",
+          attribs: {
+            ...safeAttributes,
+            loading: "lazy",
+            decoding: "async",
+          },
+        };
+      },
     },
   });
 }
@@ -121,6 +144,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const originError = crossOriginMutationResponse(request);
+  if (originError) return originError;
   if (!authenticated((await cookies()).get("academia_session")?.value)) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   }
@@ -211,6 +236,8 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const originError = crossOriginMutationResponse(request);
+  if (originError) return originError;
   if (!authenticated((await cookies()).get("academia_session")?.value)) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   }

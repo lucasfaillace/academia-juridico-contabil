@@ -20,6 +20,7 @@ import {
   type StoredBibliographicReference,
 } from "@/lib/reference-store";
 import { listPreviewFichamentos } from "@/lib/reference-fichamento-store";
+import { crossOriginMutationResponse } from "@/lib/request-security";
 
 const referenceSchema = z.object({
   referenceHtml: z.string().trim().min(1).max(40_000).optional(),
@@ -225,6 +226,8 @@ function revalidateReferencePages() {
 }
 
 export async function POST(request: Request) {
+  const originError = crossOriginMutationResponse(request);
+  if (originError) return originError;
   if (!(await authorized())) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const parsed = referenceSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Informe a referência bibliográfica completa." }, { status: 400 });
@@ -258,6 +261,8 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const originError = crossOriginMutationResponse(request);
+  if (originError) return originError;
   if (!(await authorized())) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const parsed = updateSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Dados da referência inválidos." }, { status: 400 });
@@ -296,6 +301,8 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const originError = crossOriginMutationResponse(request);
+  if (originError) return originError;
   if (!(await authorized())) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const parsed = deleteSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Referência inválida." }, { status: 400 });

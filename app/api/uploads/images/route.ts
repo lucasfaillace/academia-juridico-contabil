@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { verifySession } from "@/lib/auth";
 import { getStorage } from "@/lib/storage";
+import { crossOriginMutationResponse } from "@/lib/request-security";
 
 export const runtime = "nodejs";
 
@@ -23,6 +24,8 @@ function isValidImage(buffer: Buffer, type: keyof typeof imageTypes) {
 }
 
 export async function POST(request: Request) {
+  const originError = crossOriginMutationResponse(request);
+  if (originError) return originError;
   const token = (await cookies()).get("academia_session")?.value;
   if (!verifySession(token)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 

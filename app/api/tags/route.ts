@@ -6,6 +6,7 @@ import { verifySession } from "@/lib/auth";
 import { getPool, hasDatabaseConfig } from "@/lib/db";
 import { listStoredArticles, usesFileContentFallback } from "@/lib/preview-store";
 import { createPreviewTag, deletePreviewTag, listPreviewTags, slugifyTag, updatePreviewTag } from "@/lib/tag-store";
+import { crossOriginMutationResponse } from "@/lib/request-security";
 
 const tagSchema = z.object({
   name: z.string().trim().min(2).max(120),
@@ -42,6 +43,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const originError = crossOriginMutationResponse(request);
+  if (originError) return originError;
   if (!(await authorized())) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const parsed = tagSchema.safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ error: "Informe um nome e uma área válidos." }, { status: 400 });
@@ -65,6 +68,8 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const originError = crossOriginMutationResponse(request);
+  if (originError) return originError;
   if (!(await authorized())) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const parsed = updateSchema.safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ error: "Dados da tag inválidos." }, { status: 400 });
@@ -89,6 +94,8 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const originError = crossOriginMutationResponse(request);
+  if (originError) return originError;
   if (!(await authorized())) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const parsed = deleteSchema.safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ error: "Tag inválida." }, { status: 400 });

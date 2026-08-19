@@ -26,10 +26,11 @@ export function ArticlePageView({ article, preview = false }: { article: Article
     dateModified: article.updatedAt,
     mainEntityOfPage: share,
   };
+  const serializedJsonLd = JSON.stringify(jsonLd).replace(/</g, "\\u003c");
 
   return (
     <PageShell>
-      {!preview && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />}
+      {!preview && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializedJsonLd }} />}
       {preview && (
         <aside className="private-preview-banner" aria-label="Prévia privada do artigo">
           <div className="container">
