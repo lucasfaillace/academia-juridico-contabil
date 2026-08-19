@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 
 export default async function AdminArticlePreviewPage({ params }: { params: Promise<{ slug: string }> }) {
   const token = (await cookies()).get("academia_session")?.value;
-  if (!verifySession(token)) redirect("/admin/login");
+  if (!(await verifySession(token))) redirect("/admin/login");
 
   const { slug } = await params;
   const article = await getArticleForAdminPreview(slug);

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSession, sessionMaxAge } from "@/lib/auth";
+import { getAdminCredential } from "@/lib/admin-credentials";
 import { verifyPassword } from "@/lib/password";
 import { clearRateLimit, consumeRateLimit, isSameOriginMutation, requestAddress } from "@/lib/request-security";
 
@@ -27,11 +28,12 @@ export async function POST(request: Request) {
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Dados inválidos" }, { status: 400 });
 
-  const expectedEmail = process.env.ADMIN_EMAIL;
-  const hash = process.env.ADMIN_PASSWORD_HASH;
-  const emailMatches = Boolean(expectedEmail)
-    && parsed.data.email.toLowerCase() === expectedEmail?.toLowerCase();
-  const passwordMatches = hash ? await verifyPassword(parsed.data.password, hash) : false;
+  const credential = await getAdminCredential().catch(() => null);
+  const emailMatches = Boolean(credential)
+    && parsed.data.email.toLowerCase() === credential?.email.toLowerCase();
+  const passwordMatches = credential
+    ? await verifyPassword(parsed.data.password, credential.passwordHash)
+    : false;
   if (!emailMatches || !passwordMatches) {
     return NextResponse.json({ error: "Credenciais inválidas" }, { status: 401 });
   }
@@ -39,7 +41,7 @@ export async function POST(request: Request) {
   clearRateLimit("admin-login", address);
   const response = NextResponse.json({ ok: true });
   response.headers.set("cache-control", "private, no-store, max-age=0");
-  response.cookies.set("academia_session", createSession(parsed.data.email), {
+  response.cookies.set("academia_session", createSession(credential!.email, credential!.sessionVersion), {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",

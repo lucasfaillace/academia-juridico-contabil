@@ -124,7 +124,7 @@ async function syncFootnoteReferences(client: PoolClient, articleId: string, con
 }
 
 export async function GET() {
-  if (!authenticated((await cookies()).get("academia_session")?.value)) {
+  if (!(await authenticated((await cookies()).get("academia_session")?.value))) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   }
 
@@ -154,7 +154,7 @@ export async function GET() {
 export async function POST(request: Request) {
   const originError = crossOriginMutationResponse(request);
   if (originError) return originError;
-  if (!authenticated((await cookies()).get("academia_session")?.value)) {
+  if (!(await authenticated((await cookies()).get("academia_session")?.value))) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   }
 
@@ -242,7 +242,7 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   const originError = crossOriginMutationResponse(request);
   if (originError) return originError;
-  if (!authenticated((await cookies()).get("academia_session")?.value)) {
+  if (!(await authenticated((await cookies()).get("academia_session")?.value))) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   }
 

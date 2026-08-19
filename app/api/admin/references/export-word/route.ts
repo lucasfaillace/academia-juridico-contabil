@@ -52,7 +52,7 @@ function siteOrigin(requestHeaders: Headers, requestUrl: string) {
 
 export async function GET(request: Request) {
   const token = (await cookies()).get("academia_session")?.value;
-  if (!verifySession(token)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  if (!(await verifySession(token))) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   try {
     const document = generateReferencesDocx(await references(), siteOrigin(await headers(), request.url));

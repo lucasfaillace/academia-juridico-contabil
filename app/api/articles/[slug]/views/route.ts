@@ -34,7 +34,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     return NextResponse.json({ counted: false, reason: "consent" }, { status: 202 });
   }
   const cookieStore = await cookies();
-  if (verifySession(cookieStore.get("academia_session")?.value)) {
+  if (await verifySession(cookieStore.get("academia_session")?.value)) {
     return NextResponse.json({ counted: false, reason: "administrator" }, { status: 202 });
   }
   const userAgent = request.headers.get("user-agent") || "";

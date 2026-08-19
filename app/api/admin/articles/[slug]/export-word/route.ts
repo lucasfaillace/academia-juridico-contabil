@@ -18,7 +18,7 @@ function siteOrigin(requestHeaders: Headers, requestUrl: string) {
 
 export async function GET(request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const token = (await cookies()).get("academia_session")?.value;
-  if (!verifySession(token)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  if (!(await verifySession(token))) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const { slug } = await params;
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) {

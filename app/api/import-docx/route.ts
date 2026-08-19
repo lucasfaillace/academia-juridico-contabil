@@ -10,7 +10,7 @@ const maxBytes = 15 * 1024 * 1024;
 export async function POST(request: Request) {
   const originError = crossOriginMutationResponse(request);
   if (originError) return originError;
-  if (!verifySession((await cookies()).get("academia_session")?.value)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  if (!(await verifySession((await cookies()).get("academia_session")?.value))) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   const form = await request.formData(); const file = form.get("file");
   if (!(file instanceof File) || file.size === 0 || file.size > maxBytes || !file.name.toLowerCase().endsWith(".docx")) return NextResponse.json({ error: "Envie um arquivo .docx válido de até 15 MB." }, { status: 400 });
   const buffer = Buffer.from(await file.arrayBuffer());

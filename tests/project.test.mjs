@@ -909,3 +909,27 @@ test("fixa correções transitivas auditadas no gerenciador de pacotes", async (
   assert.match(workspace, /postcss: 8\.5\.23/);
   assert.match(workspace, /sharp: 0\.35\.3/);
 });
+
+test("permite alterar as credenciais administrativas sem armazenar senha em texto claro", async () => {
+  const [migration, credentialStore, accountRoute, auth, login, dashboard, deployment] = await Promise.all([
+    readFile(new URL("migrations/017_admin_credentials.sql", root), "utf8"),
+    readFile(new URL("lib/admin-credentials.ts", root), "utf8"),
+    readFile(new URL("app/api/admin/account/route.ts", root), "utf8"),
+    readFile(new URL("lib/auth.ts", root), "utf8"),
+    readFile(new URL("app/api/auth/login/route.ts", root), "utf8"),
+    readFile(new URL("components/AdminDashboard.tsx", root), "utf8"),
+    readFile(new URL("DEPLOYMENT.md", root), "utf8"),
+  ]);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS admin_credentials/);
+  assert.match(migration, /password_hash text NOT NULL/);
+  assert.match(credentialStore, /ON CONFLICT \(singleton\) DO UPDATE/);
+  assert.match(credentialStore, /session_version=admin_credentials\.session_version\+1/);
+  assert.match(accountRoute, /verifyPassword\(parsed\.data\.currentPassword/);
+  assert.match(accountRoute, /hashPassword\(parsed\.data\.newPassword\)/);
+  assert.match(accountRoute, /z\.string\(\)\.min\(12\)/);
+  assert.match(auth, /credential\.sessionVersion === session\.sessionVersion/);
+  assert.match(login, /getAdminCredential/);
+  assert.match(dashboard, /Conta administrativa/);
+  assert.match(dashboard, /Atualizar credenciais/);
+  assert.match(deployment, /Configurações → Conta administrativa/);
+});

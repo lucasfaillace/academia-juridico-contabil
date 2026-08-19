@@ -142,6 +142,8 @@ docker compose up -d --force-recreate app
 
 O login estará em `https://academia.seudominio.br/admin/login` depois da configuração do domínio e SSL.
 
+A senha deve conter pelo menos 12 caracteres. Depois do primeiro acesso, o administrador pode alterar o e-mail e a senha em **Configurações → Conta administrativa**. A alteração exige a senha atual, grava somente um hash `scrypt` no PostgreSQL, invalida as sessões existentes e exige novo login. As variáveis `ADMIN_EMAIL` e `ADMIN_PASSWORD_HASH` permanecem no `.env` apenas como credencial inicial e recuperação quando ainda não houver uma credencial gravada no banco.
+
 ## 8. Configurar o domínio no Nginx
 
 Substitua o domínio e instale os arquivos:

@@ -26,7 +26,7 @@ function publicComment(comment: Record<string, unknown>) {
 
 export async function GET(_request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const isAdmin = verifySession((await cookies()).get("academia_session")?.value);
+  const isAdmin = await verifySession((await cookies()).get("academia_session")?.value);
   if (!hasDatabaseConfig() && usesFileContentFallback()) {
     const comments = await listPreviewComments(slug);
     return NextResponse.json({ comments: comments.map(publicComment), isAdmin, adminName: isAdmin ? process.env.DEFAULT_AUTHOR_NAME || "Autor" : undefined });
@@ -63,7 +63,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     return NextResponse.json({ error: "Informe seu nome e escreva um comentário entre 2 e 4.000 caracteres." }, { status: 400 });
   }
 
-  const isAdmin = verifySession((await cookies()).get("academia_session")?.value);
+  const isAdmin = await verifySession((await cookies()).get("academia_session")?.value);
   const authorName = isAdmin ? process.env.DEFAULT_AUTHOR_NAME || "Autor" : parsed.data.authorName;
 
   if (!hasDatabaseConfig() && usesFileContentFallback()) {

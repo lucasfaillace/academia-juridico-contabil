@@ -18,7 +18,7 @@ export async function GET(request: Request) {
     status: 307,
     headers: { Location: "/admin" },
   });
-  response.cookies.set("academia_session", createSession("preview-local@academia.local"), {
+  response.cookies.set("academia_session", createSession("preview-local@academia.local", "local-preview"), {
     httpOnly: true,
     sameSite: "lax",
     secure: false,

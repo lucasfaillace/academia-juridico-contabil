@@ -28,7 +28,7 @@ export async function POST(request: Request) {
   const originError = crossOriginMutationResponse(request);
   if (originError) return originError;
   const token = (await cookies()).get("academia_session")?.value;
-  if (!verifySession(token)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  if (!(await verifySession(token))) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   const formData = await request.formData();
   const upload = formData.get("image");

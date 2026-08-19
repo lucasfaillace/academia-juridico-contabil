@@ -199,6 +199,12 @@ export function AdminDashboard({
   const [notice, setNotice] = useState("");
   const [autosaveStatus, setAutosaveStatus] = useState<"idle" | "pending" | "saving" | "saved" | "error">("idle");
   const [lastSavedDraft, setLastSavedDraft] = useState("");
+  const [accountEmail, setAccountEmail] = useState("");
+  const [accountCurrentPassword, setAccountCurrentPassword] = useState("");
+  const [accountNewPassword, setAccountNewPassword] = useState("");
+  const [accountPasswordConfirmation, setAccountPasswordConfirmation] = useState("");
+  const [accountStatus, setAccountStatus] = useState("");
+  const [accountLoading, setAccountLoading] = useState(false);
 
   const loadArticles = useCallback(async () => {
     setLoadingArticles(true);
@@ -251,6 +257,46 @@ export function AdminDashboard({
       setSelectedFichamentoFilterTopicIds((current) => current.filter((id) => availableTopicIds.has(id)));
     } else setNotice(data.error || "Não foi possível carregar os temas dos fichamentos.");
   }, []);
+
+  const loadAccount = useCallback(async () => {
+    setAccountLoading(true);
+    const response = await fetch("/api/admin/account", { cache: "no-store" });
+    const data = await response.json();
+    setAccountLoading(false);
+    if (response.ok) {
+      setAccountEmail(data.email || "");
+      setAccountStatus("");
+    } else {
+      setAccountStatus(data.error || "Não foi possível carregar a conta administrativa.");
+    }
+  }, []);
+
+  async function updateAccount(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setAccountStatus("");
+    if (accountNewPassword !== accountPasswordConfirmation) {
+      setAccountStatus("A confirmação da nova senha não coincide.");
+      return;
+    }
+    setAccountLoading(true);
+    const response = await fetch("/api/admin/account", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        email: accountEmail,
+        currentPassword: accountCurrentPassword,
+        newPassword: accountNewPassword,
+      }),
+    });
+    const data = await response.json();
+    setAccountLoading(false);
+    if (!response.ok) {
+      setAccountStatus(data.error || "Não foi possível alterar as credenciais.");
+      return;
+    }
+    setAccountStatus("Credenciais atualizadas. Entre novamente com os novos dados.");
+    window.setTimeout(() => { window.location.href = "/admin/login"; }, 900);
+  }
 
   useEffect(() => {
     let active = true;
@@ -1150,6 +1196,7 @@ export function AdminDashboard({
                     void loadReferences();
                     void loadFichamentoTopics();
                   }
+                  if (id === "settings") void loadAccount();
                 }
               }}
             >
@@ -2377,6 +2424,63 @@ export function AdminDashboard({
           <>
             <div className="admin-heading"><div><p className="eyebrow">Administração</p><h1>Configurações</h1></div></div>
             <section className="admin-section"><h2>Informações do site</h2><p>Dados institucionais, contato e canais oficiais serão centralizados nesta área.</p></section>
+            <section className="admin-section account-settings">
+              <div>
+                <h2>Conta administrativa</h2>
+                <p>Altere o e-mail de acesso e, quando necessário, defina uma nova senha. A senha é armazenada somente como hash.</p>
+              </div>
+              <form onSubmit={updateAccount}>
+                <label>
+                  E-mail de acesso
+                  <input
+                    type="email"
+                    value={accountEmail}
+                    onChange={(event) => setAccountEmail(event.target.value)}
+                    autoComplete="username"
+                    required
+                    maxLength={320}
+                  />
+                </label>
+                <label>
+                  Senha atual
+                  <input
+                    type="password"
+                    value={accountCurrentPassword}
+                    onChange={(event) => setAccountCurrentPassword(event.target.value)}
+                    autoComplete="current-password"
+                    required
+                    maxLength={200}
+                  />
+                </label>
+                <label>
+                  Nova senha <small>(deixe em branco para manter a atual)</small>
+                  <input
+                    type="password"
+                    value={accountNewPassword}
+                    onChange={(event) => setAccountNewPassword(event.target.value)}
+                    autoComplete="new-password"
+                    minLength={12}
+                    maxLength={200}
+                  />
+                </label>
+                <label>
+                  Confirmar nova senha
+                  <input
+                    type="password"
+                    value={accountPasswordConfirmation}
+                    onChange={(event) => setAccountPasswordConfirmation(event.target.value)}
+                    autoComplete="new-password"
+                    minLength={accountNewPassword ? 12 : undefined}
+                    maxLength={200}
+                  />
+                </label>
+                <p className="account-password-guidance">Use pelo menos 12 caracteres e evite nomes, datas e sequências previsíveis.</p>
+                <button className="button primary" disabled={accountLoading || !accountEmail || !accountCurrentPassword}>
+                  {accountLoading ? "Salvando…" : "Atualizar credenciais"}
+                </button>
+                {accountStatus && <p className="form-status" aria-live="polite">{accountStatus}</p>}
+              </form>
+            </section>
           </>
         )}
       </main>

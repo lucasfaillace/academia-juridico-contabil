@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 const periodSchema = z.enum(["7", "30", "90", "365", "all"]);
 
 export async function GET(request: Request) {
-  if (!verifySession((await cookies()).get("academia_session")?.value)) {
+  if (!(await verifySession((await cookies()).get("academia_session")?.value))) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   }
   const parsedPeriod = periodSchema.safeParse(new URL(request.url).searchParams.get("period") || "30");
