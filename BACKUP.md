@@ -44,3 +44,5 @@ Agendamento diário às 03:15 UTC:
 ```
 
 Monitore espaço livre e teste uma restauração completa pelo menos trimestralmente. Nunca considere um backup válido apenas porque o comando terminou: valide checksums e faça restauração de ensaio.
+
+Arquivos sem referência podem ser auditados, sem remoção, com `docker compose exec app node scripts/reconcile-uploads.mjs`. A exclusão exige `--apply` e deve ocorrer somente depois de um backup validado; consulte a seção **Reconciliar arquivos de upload** em `DEPLOYMENT.md`.

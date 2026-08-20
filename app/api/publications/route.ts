@@ -10,11 +10,14 @@ import { usesFileContentFallback } from "@/lib/preview-store";
 import { crossOriginMutationResponse } from "@/lib/request-security";
 import { purgeOptionalCloudflareCache } from "@/lib/cloudflare-cache";
 import { readJsonBody } from "@/lib/request-json";
+import { getStorage } from "@/lib/storage";
+
+const publicationPdfKeyPattern = /^[a-f0-9-]+-publicacao\.pdf$/i;
 
 const publicationSchema = z.object({
   id: z.string().uuid().optional(),
   referenceHtml: z.string().min(1).max(40_000),
-  pdfKey: z.string().max(500).default("").refine((value) => !value || /^[a-f0-9-]+-publicacao\.pdf$/i.test(value)),
+  pdfKey: z.string().max(500).default("").refine((value) => !value || publicationPdfKeyPattern.test(value)),
   externalUrl: z.string().trim().max(1000).default("").refine((value) => {
     if (!value) return true;
     try {
@@ -52,6 +55,31 @@ async function invalidatePublicationsPage() {
   await purgeOptionalCloudflareCache({ paths: ["/publicacoes"] });
 }
 
+async function deleteStoredPdf(pdfKey: string) {
+  if (!publicationPdfKeyPattern.test(pdfKey)) return;
+  await getStorage().deleteOriginal(pdfKey);
+}
+
+async function removePreviewPdfIfUnused(pdfKey: string | null | undefined) {
+  if (!pdfKey) return;
+  try {
+    const stillInUse = (await listStoredPublications()).some((publication) => publication.pdf_key === pdfKey);
+    if (!stillInUse) await deleteStoredPdf(pdfKey);
+  } catch (error) {
+    console.warn("publication_pdf_cleanup_failed", error instanceof Error ? error.message : "unknown");
+  }
+}
+
+async function removeDatabasePdfIfUnused(pdfKey: string | null | undefined) {
+  if (!pdfKey) return;
+  try {
+    const inUse = await getPool().query("SELECT 1 FROM publications WHERE pdf_key=$1 LIMIT 1", [pdfKey]);
+    if (!inUse.rowCount) await deleteStoredPdf(pdfKey);
+  } catch (error) {
+    console.warn("publication_pdf_cleanup_failed", error instanceof Error ? error.message : "unknown");
+  }
+}
+
 export async function GET() {
   if (!(await authenticated((await cookies()).get("academia_session")?.value))) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
@@ -87,17 +115,26 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Informe a referência completa." }, { status: 400 });
   }
   if (!hasDatabaseConfig() && usesFileContentFallback()) {
+    const previous = parsed.data.id
+      ? (await listStoredPublications()).find((publication) => publication.id === parsed.data.id)
+      : undefined;
     const publication = await saveStoredPublication({ ...parsed.data, referenceHtml });
+    if (previous?.pdf_key !== publication.pdf_key) await removePreviewPdfIfUnused(previous?.pdf_key);
     await invalidatePublicationsPage();
     return NextResponse.json(publication, { status: 201 });
   }
   try {
     const result = parsed.data.id
       ? await getPool().query(
-        `UPDATE publications
-         SET reference_html=$1, pdf_key=$2, external_url=$3, publication_date=$4, status=$5, updated_at=NOW()
-         WHERE id=$6
-         RETURNING id, reference_html, pdf_key, external_url, publication_date::text, status, created_at::text, updated_at::text`,
+        `WITH previous AS (
+           SELECT pdf_key AS previous_pdf_key FROM publications WHERE id=$6
+         ), updated AS (
+           UPDATE publications
+           SET reference_html=$1, pdf_key=$2, external_url=$3, publication_date=$4, status=$5, updated_at=NOW()
+           WHERE id=$6
+           RETURNING id, reference_html, pdf_key, external_url, publication_date::text, status, created_at::text, updated_at::text
+         )
+         SELECT updated.*, previous.previous_pdf_key FROM updated JOIN previous ON TRUE`,
         [referenceHtml, parsed.data.pdfKey || null, parsed.data.externalUrl || null, parsed.data.publicationDate, parsed.data.status, parsed.data.id],
       )
       : await getPool().query(
@@ -107,8 +144,10 @@ export async function POST(request: Request) {
         [referenceHtml, parsed.data.pdfKey || null, parsed.data.externalUrl || null, parsed.data.publicationDate, parsed.data.status],
       );
     if (!result.rowCount) return NextResponse.json({ error: "Publicação não encontrada." }, { status: 404 });
+    const { previous_pdf_key: previousPdfKey, ...publication } = result.rows[0];
+    if (previousPdfKey !== publication.pdf_key) await removeDatabasePdfIfUnused(previousPdfKey);
     await invalidatePublicationsPage();
-    return NextResponse.json(result.rows[0], { status: 201 });
+    return NextResponse.json(publication, { status: 201 });
   } catch (error) {
     console.error("publication_save_failed", error instanceof Error ? error.message : "unknown");
     return NextResponse.json({ error: "Não foi possível salvar a publicação." }, { status: 503 });
@@ -124,14 +163,17 @@ export async function DELETE(request: Request) {
   const parsed = deleteSchema.safeParse(await readJsonBody(request));
   if (!parsed.success) return NextResponse.json({ error: "Publicação inválida." }, { status: 400 });
   if (!hasDatabaseConfig() && usesFileContentFallback()) {
+    const previous = (await listStoredPublications()).find((publication) => publication.id === parsed.data.id);
     const deleted = await deleteStoredPublication(parsed.data.id);
     if (!deleted) return NextResponse.json({ error: "Publicação não encontrada." }, { status: 404 });
+    await removePreviewPdfIfUnused(previous?.pdf_key);
     await invalidatePublicationsPage();
     return NextResponse.json({ ok: true });
   }
   try {
-    const result = await getPool().query("DELETE FROM publications WHERE id=$1", [parsed.data.id]);
+    const result = await getPool().query("DELETE FROM publications WHERE id=$1 RETURNING pdf_key", [parsed.data.id]);
     if (!result.rowCount) return NextResponse.json({ error: "Publicação não encontrada." }, { status: 404 });
+    await removeDatabasePdfIfUnused(result.rows[0].pdf_key);
     await invalidatePublicationsPage();
     return NextResponse.json({ ok: true });
   } catch {

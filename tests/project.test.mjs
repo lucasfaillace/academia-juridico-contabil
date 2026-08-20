@@ -904,6 +904,36 @@ test("normaliza cada upload em somente duas versões WebP proporcionais", async 
   assert.match(exporter, /findAll\(element\.children,[\s\S]*node\.name === "img"/);
 });
 
+test("remove uploads obsoletos somente após desvinculação e oferece reconciliação segura", async () => {
+  const [storage, publications, docxImport, reconciliation, deployment, dockerfile] = await Promise.all([
+    readFile(new URL("lib/storage.ts", root), "utf8"),
+    readFile(new URL("app/api/publications/route.ts", root), "utf8"),
+    readFile(new URL("app/api/import-docx/route.ts", root), "utf8"),
+    readFile(new URL("scripts/reconcile-uploads.mjs", root), "utf8"),
+    readFile(new URL("DEPLOYMENT.md", root), "utf8"),
+    readFile(new URL("Dockerfile", root), "utf8"),
+  ]);
+
+  assert.match(storage, /deleteOriginal\(key: string\): Promise<boolean>/);
+  assert.match(storage, /path\.basename\(key\) !== key/);
+  assert.match(storage, /await unlink\(this\.originalPath\(key\)\)/);
+  assert.match(storage, /code === "ENOENT"/);
+  assert.match(publications, /SELECT 1 FROM publications WHERE pdf_key=\$1 LIMIT 1/);
+  assert.match(publications, /previous\.previous_pdf_key/);
+  assert.match(publications, /DELETE FROM publications WHERE id=\$1 RETURNING pdf_key/);
+  assert.match(publications, /removePreviewPdfIfUnused/);
+  assert.doesNotMatch(docxImport, /saveOriginal/);
+  assert.doesNotMatch(docxImport, /originalKey/);
+  assert.match(reconciliation, /process\.argv\.includes\("--apply"\)/);
+  assert.match(reconciliation, /minimumAgeHours/);
+  assert.match(reconciliation, /SELECT content_html FROM articles/);
+  assert.match(reconciliation, /SELECT pdf_key FROM publications/);
+  assert.match(reconciliation, /if \(!apply\)/);
+  assert.match(reconciliation, /await fs\.unlink\(candidate\.path\)/);
+  assert.match(deployment, /nunca remove nada sem `--apply`/);
+  assert.match(dockerfile, /COPY --from=builder --chown=nextjs:nodejs \/app\/scripts \.\/scripts/);
+});
+
 test("pagina e pesquisa o Blog no servidor sem carregar todos os artigos", async () => {
   const [repository, blogPage, articleList, home] = await Promise.all([
     readFile(new URL("lib/repository.ts", root), "utf8"),

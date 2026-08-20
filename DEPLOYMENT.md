@@ -334,6 +334,26 @@ Agendamento diário às 03:15 UTC:
 (crontab -l 2>/dev/null; echo '15 3 * * * cd /opt/academia/app && ./scripts/backup.sh /var/backups/academia >> /var/backups/academia/backup.log 2>&1') | crontab -
 ```
 
+### Reconciliar arquivos de upload
+
+Substituir ou excluir uma publicação remove o PDF anterior somente depois da confirmação no banco e desde que nenhuma outra publicação use a mesma chave. A importação de Word é processada em memória e não conserva uma cópia `.docx` sem vínculo.
+
+Para localizar arquivos antigos que já estejam órfãos, faça primeiro um backup e execute a simulação. Ela consulta artigos e publicações no PostgreSQL, ignora arquivos referenciados, arquivos ocultos e uploads modificados nas últimas 24 horas:
+
+```bash
+cd /opt/academia/app
+./scripts/backup.sh /var/backups/academia
+docker compose exec app node scripts/reconcile-uploads.mjs
+```
+
+Revise integralmente a lista. Somente depois, para remover exatamente os candidatos apresentados:
+
+```bash
+docker compose exec app node scripts/reconcile-uploads.mjs --apply
+```
+
+O comando nunca remove nada sem `--apply` e não deve ser agendado automaticamente. Para ampliar a margem de segurança, use, por exemplo, `--minimum-age-hours=168` para considerar somente arquivos sem referência há pelo menos sete dias.
+
 ## 15. Restaurar backup
 
 Faça primeiro um backup do estado atual. Em seguida:

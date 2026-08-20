@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import mammoth from "mammoth";
 import sanitizeHtml from "sanitize-html";
 import { verifySession } from "@/lib/auth";
-import { getStorage } from "@/lib/storage";
 import { crossOriginMutationResponse } from "@/lib/request-security";
 
 const maxBytes = 15 * 1024 * 1024;
@@ -16,7 +15,6 @@ export async function POST(request: Request) {
   const buffer = Buffer.from(await file.arrayBuffer());
   if (buffer[0] !== 0x50 || buffer[1] !== 0x4b) return NextResponse.json({ error: "O conteúdo do arquivo não corresponde a um documento .docx." }, { status: 400 });
   try {
-    const originalKey = await getStorage().saveOriginal(file.name, buffer);
     const result = await mammoth.convertToHtml({ buffer }, { convertImage: mammoth.images.imgElement(async (image) => ({ src: `data:${image.contentType};base64,${(await image.read("base64"))}` })) });
     const clean = sanitizeHtml(result.value, {
       allowedTags: sanitizeHtml.defaults.allowedTags.concat(["img", "table", "thead", "tbody", "tfoot", "tr", "th", "td", "caption", "sup", "sub", "u"]),
@@ -31,6 +29,8 @@ export async function POST(request: Request) {
         },
       },
     });
-    return NextResponse.json({ html: clean, originalKey, messages: result.messages.map((item) => item.message) });
-  } catch { return NextResponse.json({ error: "Não foi possível converter o documento. O arquivo foi rejeitado com segurança." }, { status: 422 }); }
+    return NextResponse.json({ html: clean, messages: result.messages.map((item) => item.message) });
+  } catch {
+    return NextResponse.json({ error: "Não foi possível converter o documento. O arquivo foi rejeitado com segurança." }, { status: 422 });
+  }
 }
