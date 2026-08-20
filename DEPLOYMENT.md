@@ -301,6 +301,16 @@ curl -fsS https://academia.seudominio.br/api/health
 
 Os logs dos contêineres usam rotação local: cinco arquivos de até 10 MB por serviço. Eles não registram senhas nem conteúdo de mensagens deliberadamente.
 
+### Manutenção das chaves temporárias de visualização
+
+As visualizações permanecem armazenadas para os relatórios, mas a chave anônima usada apenas para impedir duplicidade deixa de ser necessária após 48 horas. A limpeza ocorre fora do acesso público, em lotes, e pode ser agendada de hora em hora:
+
+```bash
+(crontab -l 2>/dev/null; echo '17 * * * * cd /opt/academia/app && docker compose exec -T app node scripts/cleanup-view-dedupe.mjs >> /var/log/academia-view-cleanup.log 2>&1') | crontab -
+```
+
+O comando não exclui visualizações nem altera totais estatísticos; apenas define como nulas chaves temporárias expiradas. O índice parcial criado pela migração `018_article_views_cleanup_index.sql` mantém essa manutenção fora do caminho de cada visita e evita varreduras desnecessárias.
+
 ## 13. Atualizar a aplicação
 
 O script atualiza apenas por avanço direto, realiza backup antes da troca, reconstrói a imagem, aplica migrações e recria os serviços:

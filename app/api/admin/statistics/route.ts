@@ -4,7 +4,7 @@ import { z } from "zod";
 import { verifySession } from "@/lib/auth";
 import { getPool, hasDatabaseConfig } from "@/lib/db";
 import { listStoredArticles, usesFileContentFallback } from "@/lib/preview-store";
-import { buildStatistics, type StatisticsPeriod } from "@/lib/statistics";
+import { buildStatistics, type StatisticsArticleSummary, type StatisticsPeriod } from "@/lib/statistics";
 import { listPreviewViewPoints } from "@/lib/statistics-store";
 import { getAnalyticsSettings } from "@/lib/analytics-settings";
 
@@ -24,26 +24,52 @@ export async function GET(request: Request) {
   try {
     let articles: { slug: string; title: string }[];
     let points: { slug: string; date: string; views: number }[];
+    let summaries: StatisticsArticleSummary[] | undefined;
     if (!hasDatabaseConfig() && usesFileContentFallback()) {
       articles = (await listStoredArticles()).map(({ slug, title }) => ({ slug, title }));
       points = await listPreviewViewPoints();
     } else {
-      const [articleResult, pointResult] = await Promise.all([
-        getPool().query("SELECT slug, title FROM articles ORDER BY title"),
+      const historyDays = period === "all" ? null : Math.max(Number(period), 31);
+      const [summaryResult, pointResult] = await Promise.all([
+        getPool().query(
+          `SELECT a.slug, a.title,
+                  COUNT(v.id)::int AS total_views,
+                  COUNT(v.id) FILTER (
+                    WHERE v.viewed_on >= (CURRENT_TIMESTAMP AT TIME ZONE 'America/Bahia')::date - 6
+                  )::int AS views_7,
+                  COUNT(v.id) FILTER (
+                    WHERE v.viewed_on >= (CURRENT_TIMESTAMP AT TIME ZONE 'America/Bahia')::date - 29
+                  )::int AS views_30,
+                  MAX(v.viewed_on)::text AS last_viewed_at
+           FROM articles a
+           LEFT JOIN article_views v ON v.article_id=a.id
+           GROUP BY a.id, a.slug, a.title
+           ORDER BY a.title`,
+        ),
         getPool().query(
           `SELECT a.slug, v.viewed_on::text AS date, COUNT(*)::int AS views
            FROM article_views v
            JOIN articles a ON a.id=v.article_id
+           WHERE ($1::int IS NULL OR v.viewed_on >=
+             (CURRENT_TIMESTAMP AT TIME ZONE 'America/Bahia')::date - ($1::int - 1))
            GROUP BY a.slug, v.viewed_on
            ORDER BY v.viewed_on`,
+          [historyDays],
         ),
       ]);
-      articles = articleResult.rows;
+      articles = summaryResult.rows.map((row) => ({ slug: row.slug, title: row.title }));
+      summaries = summaryResult.rows.map((row) => ({
+        slug: row.slug,
+        totalViews: Number(row.total_views),
+        views7: Number(row.views_7),
+        views30: Number(row.views_30),
+        lastViewedAt: row.last_viewed_at,
+      }));
       points = pointResult.rows.map((row) => ({ slug: row.slug, date: row.date, views: Number(row.views) }));
     }
     const analyticsSettings = await getAnalyticsSettings();
     return NextResponse.json({
-      ...buildStatistics(articles, points, period),
+      ...buildStatistics(articles, points, period, summaries),
       ga4Configured: analyticsSettings.enabled,
     }, { headers: { "cache-control": "private, no-store, max-age=0" } });
   } catch (error) {

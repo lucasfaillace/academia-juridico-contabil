@@ -58,9 +58,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
       });
     } else {
       const pool = getPool();
-      await pool.query(
-        "UPDATE article_views SET dedupe_key=NULL WHERE viewed_at < NOW() - INTERVAL '48 hours' AND dedupe_key IS NOT NULL",
-      );
       const result = await pool.query(
         `INSERT INTO article_views(article_id, viewed_on, dedupe_key)
          SELECT id, $2::date, $3

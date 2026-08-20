@@ -11,6 +11,14 @@ export type StatisticsPoint = {
   views: number;
 };
 
+export type StatisticsArticleSummary = {
+  slug: string;
+  totalViews: number;
+  views7: number;
+  views30: number;
+  lastViewedAt: string | null;
+};
+
 export type TimePoint = {
   label: string;
   date: string;
@@ -69,6 +77,7 @@ export function buildStatistics(
   articles: StatisticsArticle[],
   rawPoints: StatisticsPoint[],
   period: StatisticsPeriod,
+  summaries?: StatisticsArticleSummary[],
 ) {
   const today = dateInBahia();
   const earliest = rawPoints.map((point) => point.date).sort()[0];
@@ -80,6 +89,7 @@ export function buildStatistics(
   const currentMonthStart = `${today.slice(0, 7)}-01`;
   const totalsByDate = new Map<string, number>();
   const totalsByArticle = new Map<string, Map<string, number>>();
+  const summariesByArticle = new Map((summaries || []).map((summary) => [summary.slug, summary]));
 
   for (const point of rawPoints) {
     totalsByDate.set(point.date, (totalsByDate.get(point.date) || 0) + point.views);
@@ -98,9 +108,12 @@ export function buildStatistics(
   const articleStatistics = articles.map((article) => {
     const dates = totalsByArticle.get(article.slug) || new Map<string, number>();
     const entries = Array.from(dates.entries());
-    const totalViews = entries.reduce((sum, [, views]) => sum + views, 0);
-    const views7 = entries.filter(([date]) => date >= last7Start && date <= today).reduce((sum, [, views]) => sum + views, 0);
-    const views30 = entries.filter(([date]) => date >= last30Start && date <= today).reduce((sum, [, views]) => sum + views, 0);
+    const summary = summariesByArticle.get(article.slug);
+    const totalViews = summary?.totalViews ?? entries.reduce((sum, [, views]) => sum + views, 0);
+    const views7 = summary?.views7
+      ?? entries.filter(([date]) => date >= last7Start && date <= today).reduce((sum, [, views]) => sum + views, 0);
+    const views30 = summary?.views30
+      ?? entries.filter(([date]) => date >= last30Start && date <= today).reduce((sum, [, views]) => sum + views, 0);
     const periodViews = entries.filter(([date]) => date >= start && date <= today).reduce((sum, [, views]) => sum + views, 0);
     const viewedDates = entries.filter(([, views]) => views > 0).map(([date]) => date).sort();
     return {
@@ -109,13 +122,15 @@ export function buildStatistics(
       views7,
       views30,
       periodViews,
-      lastViewedAt: viewedDates.at(-1) || null,
+      lastViewedAt: summary?.lastViewedAt ?? viewedDates.at(-1) ?? null,
       dailyAverage: Number((periodViews / selectedDays).toFixed(2)),
       trend: selectedDates.map((date) => ({ date, views: dates.get(date) || 0 })),
     };
   });
 
-  const totalViews = rawPoints.reduce((sum, point) => sum + point.views, 0);
+  const totalViews = summaries
+    ? summaries.reduce((sum, summary) => sum + summary.totalViews, 0)
+    : rawPoints.reduce((sum, point) => sum + point.views, 0);
   const viewsBetween = (from: string) => rawPoints
     .filter((point) => point.date >= from && point.date <= today)
     .reduce((sum, point) => sum + point.views, 0);
@@ -130,8 +145,12 @@ export function buildStatistics(
       todayViews: totalsByDate.get(today) || 0,
       currentWeekViews: viewsBetween(currentWeekStart),
       currentMonthViews: viewsBetween(currentMonthStart),
-      last7Views: viewsBetween(last7Start),
-      last30Views: viewsBetween(last30Start),
+      last7Views: summaries
+        ? summaries.reduce((sum, summary) => sum + summary.views7, 0)
+        : viewsBetween(last7Start),
+      last30Views: summaries
+        ? summaries.reduce((sum, summary) => sum + summary.views30, 0)
+        : viewsBetween(last30Start),
     },
     daily,
     weekly: aggregate(daily, "week"),

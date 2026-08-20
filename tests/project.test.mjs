@@ -774,6 +774,30 @@ test("registra visualizações privadas por data e apresenta estatísticas somen
   assert.match(compose, /ANALYTICS_HASH_SECRET/);
 });
 
+test("mantém limpeza de deduplicação fora do pageview e filtra o histórico estatístico no banco", async () => {
+  const [viewRoute, statisticsRoute, cleanup, migration, deployment, dockerfile] = await Promise.all([
+    readFile(new URL("app/api/articles/[slug]/views/route.ts", root), "utf8"),
+    readFile(new URL("app/api/admin/statistics/route.ts", root), "utf8"),
+    readFile(new URL("scripts/cleanup-view-dedupe.mjs", root), "utf8"),
+    readFile(new URL("migrations/018_article_views_cleanup_index.sql", root), "utf8"),
+    readFile(new URL("DEPLOYMENT.md", root), "utf8"),
+    readFile(new URL("Dockerfile", root), "utf8"),
+  ]);
+
+  assert.doesNotMatch(viewRoute, /UPDATE article_views SET dedupe_key=NULL/);
+  assert.match(cleanup, /LIMIT \$1/);
+  assert.match(cleanup, /FOR UPDATE SKIP LOCKED/);
+  assert.match(cleanup, /viewed_at < NOW\(\) - INTERVAL '48 hours'/);
+  assert.match(migration, /ON article_views\(viewed_at\)/);
+  assert.match(migration, /WHERE dedupe_key IS NOT NULL/);
+  assert.match(statisticsRoute, /historyDays = period === "all" \? null/);
+  assert.match(statisticsRoute, /WHERE \(\$1::int IS NULL OR v\.viewed_on >=/);
+  assert.match(statisticsRoute, /COUNT\(v\.id\) FILTER/);
+  assert.match(statisticsRoute, /buildStatistics\(articles, points, period, summaries\)/);
+  assert.match(deployment, /cleanup-view-dedupe\.mjs/);
+  assert.match(dockerfile, /COPY --from=builder --chown=nextjs:nodejs \/app\/scripts \.\/scripts/);
+});
+
 test("oferece prévia privada de rascunhos no mesmo layout público", async () => {
   const [dashboard, adminPage, previewPage, articleView, repository, previewStore] = await Promise.all([
     readFile(new URL("components/AdminDashboard.tsx", root), "utf8"),
