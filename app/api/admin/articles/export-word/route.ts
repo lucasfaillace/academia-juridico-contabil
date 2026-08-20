@@ -1,9 +1,10 @@
 import { cookies, headers } from "next/headers";
 import { NextResponse } from "next/server";
-import { zipSync } from "fflate";
 import { verifySession } from "@/lib/auth";
 import { generateArticleDocx, wordExportFilename } from "@/lib/article-word-export";
 import { listArticlesForWordExport } from "@/lib/article-word-export-data";
+import { articleExportLimit } from "@/lib/export-limits";
+import { createStreamingZip, type StreamingZipEntry } from "@/lib/streaming-zip";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,25 +31,38 @@ function uniqueFilename(filename: string, used: Set<string>) {
   return unique;
 }
 
+function articleArchiveEntries(
+  articles: Awaited<ReturnType<typeof listArticlesForWordExport>>,
+  origin: string | undefined,
+  exportedAt: Date,
+) {
+  const usedFilenames = new Set<string>();
+  return articles.map((article): StreamingZipEntry => ({
+    filename: uniqueFilename(wordExportFilename(article.title, exportedAt), usedFilenames),
+    data: async () => new Uint8Array(await generateArticleDocx(article, origin)),
+  }));
+}
+
 export async function GET(request: Request) {
   const token = (await cookies()).get("academia_session")?.value;
   if (!(await verifySession(token))) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   try {
-    const articles = await listArticlesForWordExport();
+    const limit = articleExportLimit();
+    const articles = await listArticlesForWordExport(undefined, limit + 1);
     if (!articles.length) return NextResponse.json({ error: "Nenhum artigo cadastrado." }, { status: 404 });
+    if (articles.length > limit) {
+      return NextResponse.json({
+        error: `A exportação conjunta está limitada a ${limit} artigos. Exporte os artigos individualmente ou ajuste MAX_BULK_ARTICLE_EXPORT.`,
+        code: "export_limit_exceeded",
+        limit,
+      }, { status: 413 });
+    }
 
     const exportedAt = new Date();
     const origin = siteOrigin(await headers(), request.url);
-    const files: Record<string, Uint8Array> = {};
-    const usedFilenames = new Set<string>();
-    for (const article of articles) {
-      const filename = uniqueFilename(wordExportFilename(article.title, exportedAt), usedFilenames);
-      files[filename] = new Uint8Array(await generateArticleDocx(article, origin));
-    }
-    const archive = zipSync(files, { level: 6 });
     const filename = `artigos-academia-juridico-contabil-${exportedAt.toISOString().slice(0, 10)}.zip`;
-    return new NextResponse(new Uint8Array(archive), {
+    return new NextResponse(createStreamingZip(articleArchiveEntries(articles, origin, exportedAt)), {
       headers: {
         "content-type": "application/zip",
         "content-disposition": `attachment; filename="${filename}"`,

@@ -16,11 +16,12 @@ function authors(authorNames: unknown, legacyAuthor: string | null | undefined) 
   return [legacyAuthor?.trim() || "Autoria não informada"];
 }
 
-export async function listArticlesForWordExport(slug?: string): Promise<WordExportArticle[]> {
+export async function listArticlesForWordExport(slug?: string, limit?: number): Promise<WordExportArticle[]> {
   if (!hasDatabaseConfig() && usesFileContentFallback()) {
     const [storedArticles, references] = await Promise.all([listStoredArticles(), listPreviewReferences()]);
-    return storedArticles
+    const selectedArticles = storedArticles
       .filter((article) => !slug || article.slug === slug)
+      .slice(0, limit)
       .map((article) => {
         const referenceIds = new Set(extractFootnoteReferenceLinks(article.content_html).map((link) => link.referenceId));
         return {
@@ -45,6 +46,7 @@ export async function listArticlesForWordExport(slug?: string): Promise<WordExpo
           updatedAt: article.updated_at,
         };
       });
+    return selectedArticles;
   }
 
   const result = await getPool().query(
@@ -74,8 +76,9 @@ export async function listArticlesForWordExport(slug?: string): Promise<WordExpo
      LEFT JOIN tags t ON t.id = at.tag_id
      WHERE ($1::text IS NULL OR a.slug=$1)
      GROUP BY a.id, c.name
-     ORDER BY COALESCE(a.published_at, a.updated_at) DESC, a.title`,
-    [slug || null],
+     ORDER BY COALESCE(a.published_at, a.updated_at) DESC, a.title
+     LIMIT $2`,
+    [slug || null, limit || null],
   );
 
   return result.rows.map((row) => ({

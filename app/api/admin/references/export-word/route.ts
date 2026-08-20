@@ -7,6 +7,7 @@ import {
 } from "@/lib/article-word-export";
 import { verifySession } from "@/lib/auth";
 import { getPool, hasDatabaseConfig } from "@/lib/db";
+import { ExportLimitError, referenceExportLimit } from "@/lib/export-limits";
 import { listPreviewReferences } from "@/lib/reference-store";
 import {
   legacyReferenceHtml,
@@ -18,8 +19,11 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 async function references(): Promise<WordExportReference[]> {
+  const limit = referenceExportLimit();
   if (!hasDatabaseConfig() && usesFileContentFallback()) {
-    return (await listPreviewReferences()).map((reference) => ({
+    const stored = await listPreviewReferences();
+    if (stored.length > limit) throw new ExportLimitError(`A exportação está limitada a ${limit} referências.`, limit);
+    return stored.map((reference) => ({
       id: reference.id,
       referenceText: reference.referenceText,
       referenceHtml: sanitizeBibliographicReferenceHtml(
@@ -32,8 +36,11 @@ async function references(): Promise<WordExportReference[]> {
             reference_text AS "referenceText",
             COALESCE(reference_html, '') AS "referenceHtml"
      FROM bibliographic_references
-     ORDER BY lower(reference_text)`,
+     ORDER BY lower(reference_text)
+     LIMIT $1`,
+    [limit + 1],
   );
+  if (result.rows.length > limit) throw new ExportLimitError(`A exportação está limitada a ${limit} referências.`, limit);
   return result.rows.map((reference) => ({
     ...reference,
     referenceHtml: sanitizeBibliographicReferenceHtml(
@@ -66,6 +73,9 @@ export async function GET(request: Request) {
       },
     });
   } catch (error) {
+    if (error instanceof ExportLimitError) {
+      return NextResponse.json({ error: error.message, code: "export_limit_exceeded", limit: error.limit }, { status: 413 });
+    }
     console.error("references_word_export_failed", error instanceof Error ? error.message : "unknown");
     return NextResponse.json({ error: "Não foi possível exportar as referências para Word." }, { status: 500 });
   }

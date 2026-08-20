@@ -625,7 +625,7 @@ test("exporta artigos para Word exclusivamente pelo painel autenticado", async (
   assert.match(route, /private, no-store/);
   assert.match(allRoute, /verifySession/);
   assert.match(allRoute, /listArticlesForWordExport/);
-  assert.match(allRoute, /zipSync/);
+  assert.match(allRoute, /createStreamingZip/);
   assert.match(allRoute, /application\/zip/);
   assert.match(dashboard, /Exportar todos/);
   assert.match(dashboard, /\/api\/admin\/articles\/export-word/);
@@ -796,6 +796,33 @@ test("mantém limpeza de deduplicação fora do pageview e filtra o histórico e
   assert.match(statisticsRoute, /buildStatistics\(articles, points, period, summaries\)/);
   assert.match(deployment, /cleanup-view-dedupe\.mjs/);
   assert.match(dockerfile, /COPY --from=builder --chown=nextjs:nodejs \/app\/scripts \.\/scripts/);
+});
+
+test("limita exportações, transmite o ZIP e pré-seleciona duplicatas por índice", async () => {
+  const [references, articlesExport, exportData, referencesExport, fichamentosExport, migration, compose, deployment] = await Promise.all([
+    readFile(new URL("app/api/references/route.ts", root), "utf8"),
+    readFile(new URL("app/api/admin/articles/export-word/route.ts", root), "utf8"),
+    readFile(new URL("lib/article-word-export-data.ts", root), "utf8"),
+    readFile(new URL("app/api/admin/references/export-word/route.ts", root), "utf8"),
+    readFile(new URL("app/api/admin/references/export-word-with-fichamentos/route.ts", root), "utf8"),
+    readFile(new URL("migrations/019_reference_similarity_index.sql", root), "utf8"),
+    readFile(new URL("docker-compose.yml", root), "utf8"),
+    readFile(new URL("DEPLOYMENT.md", root), "utf8"),
+  ]);
+
+  assert.match(migration, /CREATE EXTENSION IF NOT EXISTS pg_trgm/);
+  assert.match(migration, /gin \(normalized_text gin_trgm_ops\)/);
+  assert.match(references, /normalized_text % \$1/);
+  assert.match(references, /LIMIT 24/);
+  assert.doesNotMatch(references, /SELECT id,reference_text[\s\S]*FROM bibliographic_references"/);
+  assert.match(articlesExport, /createStreamingZip/);
+  assert.doesNotMatch(articlesExport, /zipSync/);
+  assert.match(exportData, /LIMIT \$2/);
+  assert.match(referencesExport, /ExportLimitError/);
+  assert.match(fichamentosExport, /fichamentosByReference/);
+  assert.doesNotMatch(fichamentosExport, /fichamentosResult\.rows\.filter/);
+  assert.match(compose, /MAX_BULK_ARTICLE_EXPORT/);
+  assert.match(deployment, /ZIP de artigos é enviado progressivamente/);
 });
 
 test("oferece prévia privada de rascunhos no mesmo layout público", async () => {

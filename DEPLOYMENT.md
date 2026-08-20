@@ -91,6 +91,8 @@ Use a primeira saída em `POSTGRES_PASSWORD`, a segunda em `AUTH_SECRET` e a ter
 - administrador (`ADMIN_EMAIL`; o hash será criado no passo 7);
 - SMTP e endereços do formulário de contato.
 
+As exportações administrativas possuem limites preventivos configuráveis em `MAX_BULK_ARTICLE_EXPORT`, `MAX_REFERENCE_EXPORT` e `MAX_FICHAMENTO_EXPORT`. Os padrões atendem um acervo amplo e evitam que uma única solicitação consuma toda a memória da VPS. O ZIP de artigos é enviado progressivamente e cada DOCX é produzido em sequência; aumente os limites somente depois de medir a memória no servidor. A exportação individual de artigos não é afetada.
+
 Valide sem exibir segredos:
 
 ```bash

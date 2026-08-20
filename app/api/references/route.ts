@@ -51,7 +51,10 @@ type ReferenceRecord = {
   fichamentoCount: number;
   fichamentoTopicSets: string[][];
   fichamentoSearchText: string;
+  duplicateCandidates?: DuplicateCandidate[];
 };
+
+type DuplicateCandidate = Pick<ReferenceRecord, "id" | "referenceText" | "referenceHtml">;
 
 async function authorized() {
   return verifySession((await cookies()).get("academia_session")?.value);
@@ -72,12 +75,56 @@ function previewUsages(id: string, articles: Awaited<ReturnType<typeof listStore
   );
 }
 
+function candidateTrigrams(value: string) {
+  const normalized = ` ${normalizeReferenceText(value)} `;
+  const trigrams = new Set<string>();
+  for (let index = 0; index < normalized.length - 2; index += 1) {
+    trigrams.add(normalized.slice(index, index + 3));
+  }
+  return trigrams;
+}
+
+function previewDuplicateCandidates(references: ReferenceRecord[]) {
+  const trigramsById = new Map(references.map((reference) => [reference.id, candidateTrigrams(reference.referenceText)]));
+  const referencesById = new Map(references.map((reference) => [reference.id, reference]));
+  const postings = new Map<string, string[]>();
+  for (const [id, trigrams] of trigramsById) {
+    for (const trigram of trigrams) {
+      const posting = postings.get(trigram);
+      if (posting) posting.push(id);
+      else postings.set(trigram, [id]);
+    }
+  }
+
+  return new Map(references.map((reference) => {
+    const scores = new Map<string, number>();
+    const selectiveTrigrams = Array.from(trigramsById.get(reference.id) || [])
+      .sort((left, right) => (postings.get(left)?.length || 0) - (postings.get(right)?.length || 0))
+      .slice(0, 16);
+    for (const trigram of selectiveTrigrams) {
+      for (const candidateId of postings.get(trigram) || []) {
+        if (candidateId !== reference.id) scores.set(candidateId, (scores.get(candidateId) || 0) + 1);
+      }
+    }
+    const candidates = Array.from(scores)
+      .sort((left, right) => right[1] - left[1])
+      .slice(0, 24)
+      .flatMap(([id]) => {
+        const candidate = referencesById.get(id);
+        return candidate ? [{ id: candidate.id, referenceText: candidate.referenceText, referenceHtml: candidate.referenceHtml }] : [];
+      });
+    return [reference.id, candidates] as const;
+  }));
+}
+
 function withDuplicateWarnings(references: ReferenceRecord[]) {
-  return references.map((reference) => ({
+  const fallbackCandidates = references.some((reference) => reference.duplicateCandidates === undefined)
+    ? previewDuplicateCandidates(references)
+    : new Map<string, DuplicateCandidate[]>();
+  return references.map(({ duplicateCandidates, ...reference }) => ({
     ...reference,
     usageCount: reference.usages.length,
-    possibleDuplicates: references
-      .filter((candidate) => candidate.id !== reference.id)
+    possibleDuplicates: (duplicateCandidates || fallbackCandidates.get(reference.id) || [])
       .map((candidate) => ({
         id: candidate.id,
         referenceText: candidate.referenceText,
@@ -155,7 +202,28 @@ async function databaseRecords(): Promise<ReturnType<typeof withDuplicateWarning
                 ORDER BY lower(a.title), afr.note_number, afr.occurrence_index
               ) FILTER (WHERE afr.article_id IS NOT NULL),
               '[]'::jsonb
-            ) AS usages
+            ) AS usages,
+            COALESCE((
+              SELECT jsonb_agg(
+                jsonb_build_object(
+                  'id', candidate.id,
+                  'referenceText', candidate.reference_text,
+                  'referenceHtml', COALESCE(candidate.reference_html, '')
+                )
+                ORDER BY candidate.trigram_similarity DESC
+              )
+              FROM (
+                SELECT other.id,
+                       other.reference_text,
+                       other.reference_html,
+                       similarity(other.normalized_text, br.normalized_text) AS trigram_similarity
+                FROM bibliographic_references other
+                WHERE other.id <> br.id
+                  AND other.normalized_text % br.normalized_text
+                ORDER BY trigram_similarity DESC
+                LIMIT 24
+              ) candidate
+            ), '[]'::jsonb) AS "duplicateCandidates"
      FROM bibliographic_references br
      LEFT JOIN article_footnote_references afr ON afr.reference_id=br.id
      LEFT JOIN articles a ON a.id=afr.article_id
@@ -190,11 +258,21 @@ export async function GET(request: Request) {
 }
 
 async function similarDatabaseReferences(referenceText: string, excludedId?: string) {
+  const normalizedText = normalizeReferenceText(referenceText);
   const result = await getPool().query(
-    "SELECT id,reference_text AS \"referenceText\",COALESCE(reference_html,'') AS \"referenceHtml\",normalized_text AS \"normalizedText\",updated_at::text AS \"updatedAt\" FROM bibliographic_references",
+    `SELECT id,
+            reference_text AS "referenceText",
+            COALESCE(reference_html,'') AS "referenceHtml",
+            normalized_text AS "normalizedText",
+            updated_at::text AS "updatedAt"
+     FROM bibliographic_references
+     WHERE ($2::uuid IS NULL OR id <> $2)
+       AND normalized_text % $1
+     ORDER BY similarity(normalized_text, $1) DESC
+     LIMIT 24`,
+    [normalizedText, excludedId || null],
   );
   return result.rows
-    .filter((reference) => reference.id !== excludedId)
     .map((reference) => ({ ...reference, similarity: referenceSimilarity(referenceText, reference.referenceText) }))
     .filter((reference) => reference.similarity >= 0.72)
     .sort((a, b) => b.similarity - a.similarity)

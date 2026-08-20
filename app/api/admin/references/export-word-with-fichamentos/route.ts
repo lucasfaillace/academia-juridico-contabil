@@ -7,6 +7,7 @@ import {
 } from "@/lib/article-word-export";
 import { verifySession } from "@/lib/auth";
 import { getPool, hasDatabaseConfig } from "@/lib/db";
+import { ExportLimitError, fichamentoExportLimit, referenceExportLimit } from "@/lib/export-limits";
 import { listPreviewFichamentoTopics } from "@/lib/fichamento-topic-store";
 import { usesFileContentFallback } from "@/lib/preview-store";
 import { listPreviewFichamentos } from "@/lib/reference-fichamento-store";
@@ -27,22 +28,47 @@ async function records(): Promise<WordExportReferenceWithFichamentos[]> {
       listPreviewFichamentoTopics(),
     ]);
     const topicsById = new Map(topics.map((topic) => [topic.id, topic]));
+    const referenceLimit = referenceExportLimit();
+    const fichamentoLimit = fichamentoExportLimit();
+    if (references.length > referenceLimit) {
+      throw new ExportLimitError(`A exportação está limitada a ${referenceLimit} referências.`, referenceLimit);
+    }
+    if (fichamentos.length > fichamentoLimit) {
+      throw new ExportLimitError(`A exportação está limitada a ${fichamentoLimit} registros de fichamento.`, fichamentoLimit);
+    }
+    const fichamentosByReference = new Map<string, WordExportReferenceWithFichamentos["fichamentos"]>();
+    for (const item of fichamentos) {
+      const grouped = fichamentosByReference.get(item.referenceId) || [];
+      grouped.push({
+        literalQuote: item.literalQuote,
+        paraphrase: item.paraphrase,
+        location: item.location,
+        personalNote: item.personalNote,
+        topics: item.topicIds.map((id) => topicsById.get(id)).filter((topic) => topic !== undefined),
+      });
+      fichamentosByReference.set(item.referenceId, grouped);
+    }
     return references.map((reference) => ({
       id: reference.id,
       referenceText: reference.referenceText,
       referenceHtml: sanitizeBibliographicReferenceHtml(
         reference.referenceHtml || legacyReferenceHtml(reference.referenceText),
       ),
-      fichamentos: fichamentos
-        .filter((item) => item.referenceId === reference.id)
-        .map((item) => ({
-          literalQuote: item.literalQuote,
-          paraphrase: item.paraphrase,
-          location: item.location,
-          personalNote: item.personalNote,
-          topics: item.topicIds.map((id) => topicsById.get(id)).filter((topic) => topic !== undefined),
-        })),
+      fichamentos: fichamentosByReference.get(reference.id) || [],
     }));
+  }
+
+  const referenceLimit = referenceExportLimit();
+  const fichamentoLimit = fichamentoExportLimit();
+  const countResult = await getPool().query(
+    `SELECT (SELECT COUNT(*)::int FROM bibliographic_references) AS references,
+            (SELECT COUNT(*)::int FROM reference_fichamentos) AS fichamentos`,
+  );
+  if (Number(countResult.rows[0].references) > referenceLimit) {
+    throw new ExportLimitError(`A exportação está limitada a ${referenceLimit} referências.`, referenceLimit);
+  }
+  if (Number(countResult.rows[0].fichamentos) > fichamentoLimit) {
+    throw new ExportLimitError(`A exportação está limitada a ${fichamentoLimit} registros de fichamento.`, fichamentoLimit);
   }
 
   const [referencesResult, fichamentosResult] = await Promise.all([
@@ -74,12 +100,18 @@ async function records(): Promise<WordExportReferenceWithFichamentos[]> {
        ORDER BY rf.updated_at DESC`,
     ),
   ]);
+  const fichamentosByReference = new Map<string, WordExportReferenceWithFichamentos["fichamentos"]>();
+  for (const item of fichamentosResult.rows) {
+    const grouped = fichamentosByReference.get(item.referenceId) || [];
+    grouped.push(item);
+    fichamentosByReference.set(item.referenceId, grouped);
+  }
   return referencesResult.rows.map((reference) => ({
     ...reference,
     referenceHtml: sanitizeBibliographicReferenceHtml(
       reference.referenceHtml || legacyReferenceHtml(reference.referenceText),
     ),
-    fichamentos: fichamentosResult.rows.filter((item) => item.referenceId === reference.id),
+    fichamentos: fichamentosByReference.get(reference.id) || [],
   }));
 }
 
@@ -110,6 +142,9 @@ export async function GET(request: Request) {
       },
     });
   } catch (error) {
+    if (error instanceof ExportLimitError) {
+      return NextResponse.json({ error: error.message, code: "export_limit_exceeded", limit: error.limit }, { status: 413 });
+    }
     console.error("references_fichamentos_word_export_failed", error instanceof Error ? error.message : "unknown");
     return NextResponse.json({ error: "Não foi possível exportar as referências e os fichamentos." }, { status: 500 });
   }
