@@ -42,7 +42,27 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:?Defina POSTGRES_USER no .env}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no .env}
       POSTGRES_INITDB_ARGS: "--data-checksums --encoding=UTF8"
-    command: ["postgres", "-c", "shared_buffers=256MB", "-c", "max_connections=100", "-c", "log_min_duration_statement=1000"]
+    # Database tuning mínimo: balanceado entre performance e consumo de memória
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - effective_cache_size=512MB
+      - -c
+      - maintenance_work_mem=64MB
+      - -c
+      - checkpoint_completion_target=0.9
+      - -c
+      - wal_buffers=4MB
+      - -c
+      - default_statistics_target=50
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - max_connections=50
+      - -c
+      - log_min_duration_statement=1000
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
