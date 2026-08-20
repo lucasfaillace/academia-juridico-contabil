@@ -117,6 +117,20 @@ test("não contém dependências estruturais de edge ou serverless", async () =>
   assert.match(deployment, /CONFIRM_RESTORE=RESTAURAR/);
 });
 
+test("mantém CI com build, PostgreSQL, migrações e validação Docker", async () => {
+  const workflow = await readFile(new URL(".github/workflows/ci.yml", root), "utf8");
+  assert.match(workflow, /permissions:\s*\n\s*contents: read/);
+  assert.match(workflow, /postgres:17-alpine/);
+  assert.match(workflow, /pnpm install --frozen-lockfile/);
+  assert.match(workflow, /pnpm lint/);
+  assert.match(workflow, /pnpm typecheck/);
+  assert.match(workflow, /pnpm test/);
+  assert.equal((workflow.match(/pnpm db:migrate/g) || []).length, 2);
+  assert.match(workflow, /pnpm build/);
+  assert.match(workflow, /pnpm audit --prod/);
+  assert.match(workflow, /\.\/scripts\/check-production\.sh/);
+});
+
 test("oferece comentários encadeados com identificação do autor", async () => {
   const [component, api, migration, articlePage] = await Promise.all([
     readFile(new URL("components/ArticleComments.tsx", root), "utf8"),

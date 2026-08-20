@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validar aplicação e produção
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: academia_ci
+          POSTGRES_USER: academia_ci
+          POSTGRES_PASSWORD: postgres-ci-local
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U academia_ci -d academia_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      NEXT_PUBLIC_SITE_URL: https://ci.example.invalid
+      POSTGRES_DB: academia_ci
+      POSTGRES_USER: academia_ci
+      POSTGRES_PASSWORD: postgres-ci-local
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGDATABASE: academia_ci
+      PGUSER: academia_ci
+      PGPASSWORD: postgres-ci-local
+      DATABASE_SSL: "false"
+      AUTH_SECRET: ci-auth-secret-with-at-least-32-characters
+      ANALYTICS_HASH_SECRET: ci-analytics-secret-with-at-least-32-characters
+      ADMIN_EMAIL: admin-ci@example.invalid
+      ADMIN_PASSWORD_HASH: 'scrypt$16384$8$1$ci-salt$ci-derived-key'
+
+    steps:
+      - name: Obter o código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Ativar pnpm fixado pelo projeto
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.19.0 --activate
+          pnpm --version
+
+      - name: Instalar dependências com lockfile congelado
+        run: pnpm install --frozen-lockfile
+
+      - name: Verificar lint
+        run: pnpm lint
+
+      - name: Verificar tipos
+        run: pnpm typecheck
+
+      - name: Executar testes
+        run: pnpm test
+
+      - name: Aplicar migrações em PostgreSQL limpo
+        run: pnpm db:migrate
+
+      - name: Confirmar idempotência e checksums das migrações
+        run: pnpm db:migrate
+
+      - name: Compilar a aplicação para produção
+        run: pnpm build
+
+      - name: Auditar dependências de produção
+        run: pnpm audit --prod
+
+      - name: Validar Docker Compose, imagem e runtime
+        run: ./scripts/check-production.sh
