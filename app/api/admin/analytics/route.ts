@@ -8,6 +8,7 @@ import {
 } from "@/lib/analytics-settings";
 import { verifySession } from "@/lib/auth";
 import { crossOriginMutationResponse } from "@/lib/request-security";
+import { readJsonBody } from "@/lib/request-json";
 
 const settingsSchema = z.object({
   enabled: z.boolean(),
@@ -37,7 +38,7 @@ export async function PATCH(request: Request) {
   const originError = crossOriginMutationResponse(request);
   if (originError) return originError;
   if (!(await authorized())) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const parsed = settingsSchema.safeParse(await request.json().catch(() => null));
+  const parsed = settingsSchema.safeParse(await readJsonBody(request));
   if (!parsed.success) {
     return NextResponse.json(
       { error: "Informe um ID de medição válido no formato G-XXXXXXXXXX ou desative a integração." },
@@ -53,4 +54,3 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Não foi possível salvar a configuração do Google Analytics." }, { status: 503 });
   }
 }
-

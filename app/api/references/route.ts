@@ -21,6 +21,7 @@ import {
 } from "@/lib/reference-store";
 import { listPreviewFichamentos } from "@/lib/reference-fichamento-store";
 import { crossOriginMutationResponse } from "@/lib/request-security";
+import { readJsonBody } from "@/lib/request-json";
 import { purgeOptionalCloudflareCache } from "@/lib/cloudflare-cache";
 
 const referenceSchema = z.object({
@@ -231,7 +232,7 @@ export async function POST(request: Request) {
   const originError = crossOriginMutationResponse(request);
   if (originError) return originError;
   if (!(await authorized())) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const parsed = referenceSchema.safeParse(await request.json().catch(() => null));
+  const parsed = referenceSchema.safeParse(await readJsonBody(request));
   if (!parsed.success) return NextResponse.json({ error: "Informe a referência bibliográfica completa." }, { status: 400 });
   const reference = parsedReference(parsed.data);
   if (!reference) return NextResponse.json({ error: "Informe a referência bibliográfica completa." }, { status: 400 });
@@ -266,7 +267,7 @@ export async function PATCH(request: Request) {
   const originError = crossOriginMutationResponse(request);
   if (originError) return originError;
   if (!(await authorized())) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const parsed = updateSchema.safeParse(await request.json().catch(() => null));
+  const parsed = updateSchema.safeParse(await readJsonBody(request));
   if (!parsed.success) return NextResponse.json({ error: "Dados da referência inválidos." }, { status: 400 });
   const reference = parsedReference(parsed.data);
   if (!reference) return NextResponse.json({ error: "Informe a referência bibliográfica completa." }, { status: 400 });
@@ -306,7 +307,7 @@ export async function DELETE(request: Request) {
   const originError = crossOriginMutationResponse(request);
   if (originError) return originError;
   if (!(await authorized())) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const parsed = deleteSchema.safeParse(await request.json().catch(() => null));
+  const parsed = deleteSchema.safeParse(await readJsonBody(request));
   if (!parsed.success) return NextResponse.json({ error: "Referência inválida." }, { status: 400 });
 
   const records = await listRecords();

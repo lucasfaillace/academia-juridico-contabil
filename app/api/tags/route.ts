@@ -8,6 +8,7 @@ import { listStoredArticles, usesFileContentFallback } from "@/lib/preview-store
 import { createPreviewTag, deletePreviewTag, listPreviewTags, slugifyTag, updatePreviewTag } from "@/lib/tag-store";
 import { crossOriginMutationResponse } from "@/lib/request-security";
 import { purgeOptionalCloudflareCache } from "@/lib/cloudflare-cache";
+import { readJsonBody } from "@/lib/request-json";
 
 const tagSchema = z.object({
   name: z.string().trim().min(2).max(120),
@@ -54,7 +55,7 @@ export async function POST(request: Request) {
   const originError = crossOriginMutationResponse(request);
   if (originError) return originError;
   if (!(await authorized())) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const parsed = tagSchema.safeParse(await request.json());
+  const parsed = tagSchema.safeParse(await readJsonBody(request));
   if (!parsed.success) return NextResponse.json({ error: "Informe um nome e uma área válidos." }, { status: 400 });
   if (!hasDatabaseConfig() && usesFileContentFallback()) {
     try {
@@ -82,7 +83,7 @@ export async function PATCH(request: Request) {
   const originError = crossOriginMutationResponse(request);
   if (originError) return originError;
   if (!(await authorized())) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const parsed = updateSchema.safeParse(await request.json());
+  const parsed = updateSchema.safeParse(await readJsonBody(request));
   if (!parsed.success) return NextResponse.json({ error: "Dados da tag inválidos." }, { status: 400 });
   if (!hasDatabaseConfig() && usesFileContentFallback()) {
     try {
@@ -110,7 +111,7 @@ export async function DELETE(request: Request) {
   const originError = crossOriginMutationResponse(request);
   if (originError) return originError;
   if (!(await authorized())) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const parsed = deleteSchema.safeParse(await request.json());
+  const parsed = deleteSchema.safeParse(await readJsonBody(request));
   if (!parsed.success) return NextResponse.json({ error: "Tag inválida." }, { status: 400 });
   if (!hasDatabaseConfig() && usesFileContentFallback()) {
     try {

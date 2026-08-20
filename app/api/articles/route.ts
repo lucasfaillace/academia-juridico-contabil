@@ -12,6 +12,7 @@ import { deleteStoredArticle, listStoredArticles, saveStoredArticle, usesFileCon
 import { listPreviewTags } from "@/lib/tag-store";
 import { crossOriginMutationResponse } from "@/lib/request-security";
 import { purgeOptionalCloudflareCache } from "@/lib/cloudflare-cache";
+import { readJsonBody } from "@/lib/request-json";
 
 function isYouTubeUrl(value: string) {
   if (!value) return true;
@@ -158,7 +159,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   }
 
-  const parsed = articleSchema.safeParse(await request.json());
+  const parsed = articleSchema.safeParse(await readJsonBody(request));
   if (!parsed.success) return NextResponse.json({ error: "Revise título, autoria, resumo e conteúdo." }, { status: 400 });
 
   const slug = slugify(parsed.data.title);
@@ -246,7 +247,7 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   }
 
-  const parsed = deleteArticleSchema.safeParse(await request.json().catch(() => null));
+  const parsed = deleteArticleSchema.safeParse(await readJsonBody(request));
   if (!parsed.success) return NextResponse.json({ error: "Artigo inválido." }, { status: 400 });
   const { slug } = parsed.data;
 

@@ -6,6 +6,7 @@ import { deletePreviewComment, listAllPreviewComments, updatePreviewComment } fr
 import { getPool, hasDatabaseConfig } from "@/lib/db";
 import { listStoredArticles, usesFileContentFallback } from "@/lib/preview-store";
 import { crossOriginMutationResponse } from "@/lib/request-security";
+import { readJsonBody } from "@/lib/request-json";
 
 const updateSchema = z.object({
   id: z.string().uuid(),
@@ -60,7 +61,7 @@ export async function PATCH(request: Request) {
   const originError = crossOriginMutationResponse(request);
   if (originError) return originError;
   if (!(await authorized())) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const parsed = updateSchema.safeParse(await request.json());
+  const parsed = updateSchema.safeParse(await readJsonBody(request));
   if (!parsed.success) return NextResponse.json({ error: "O comentário deve ter entre 2 e 4.000 caracteres." }, { status: 400 });
   if (!hasDatabaseConfig() && usesFileContentFallback()) {
     try {
@@ -85,7 +86,7 @@ export async function DELETE(request: Request) {
   const originError = crossOriginMutationResponse(request);
   if (originError) return originError;
   if (!(await authorized())) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const parsed = deleteSchema.safeParse(await request.json());
+  const parsed = deleteSchema.safeParse(await readJsonBody(request));
   if (!parsed.success) return NextResponse.json({ error: "Comentário inválido." }, { status: 400 });
   if (!hasDatabaseConfig() && usesFileContentFallback()) {
     try {

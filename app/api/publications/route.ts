@@ -9,6 +9,7 @@ import { deleteStoredPublication, listStoredPublications, saveStoredPublication 
 import { usesFileContentFallback } from "@/lib/preview-store";
 import { crossOriginMutationResponse } from "@/lib/request-security";
 import { purgeOptionalCloudflareCache } from "@/lib/cloudflare-cache";
+import { readJsonBody } from "@/lib/request-json";
 
 const publicationSchema = z.object({
   id: z.string().uuid().optional(),
@@ -77,7 +78,7 @@ export async function POST(request: Request) {
   if (!(await authenticated((await cookies()).get("academia_session")?.value))) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   }
-  const parsed = publicationSchema.safeParse(await request.json());
+  const parsed = publicationSchema.safeParse(await readJsonBody(request));
   if (!parsed.success) {
     return NextResponse.json({ error: "Revise a referência, a data e os endereços informados." }, { status: 400 });
   }
@@ -120,7 +121,7 @@ export async function DELETE(request: Request) {
   if (!(await authenticated((await cookies()).get("academia_session")?.value))) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   }
-  const parsed = deleteSchema.safeParse(await request.json());
+  const parsed = deleteSchema.safeParse(await readJsonBody(request));
   if (!parsed.success) return NextResponse.json({ error: "Publicação inválida." }, { status: 400 });
   if (!hasDatabaseConfig() && usesFileContentFallback()) {
     const deleted = await deleteStoredPublication(parsed.data.id);

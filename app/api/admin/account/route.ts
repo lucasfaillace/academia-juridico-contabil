@@ -5,6 +5,7 @@ import { getAdminCredential, saveAdminCredential } from "@/lib/admin-credentials
 import { verifySession } from "@/lib/auth";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { crossOriginMutationResponse } from "@/lib/request-security";
+import { readJsonBody } from "@/lib/request-json";
 
 const updateSchema = z.object({
   email: z.email().max(320),
@@ -36,7 +37,7 @@ export async function PATCH(request: Request) {
   if (originError) return originError;
   if (!(await authorized())) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
-  const parsed = updateSchema.safeParse(await request.json().catch(() => null));
+  const parsed = updateSchema.safeParse(await readJsonBody(request));
   if (!parsed.success) {
     return NextResponse.json(
       { error: "Informe um e-mail válido e, se alterar a senha, use ao menos 12 caracteres." },
@@ -71,4 +72,3 @@ export async function PATCH(request: Request) {
   });
   return response;
 }
-

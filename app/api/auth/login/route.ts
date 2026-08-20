@@ -4,6 +4,7 @@ import { createSession, sessionMaxAge } from "@/lib/auth";
 import { getAdminCredential } from "@/lib/admin-credentials";
 import { verifyPassword } from "@/lib/password";
 import { clearRateLimit, consumeRateLimit, isSameOriginMutation, requestAddress } from "@/lib/request-security";
+import { readJsonBody } from "@/lib/request-json";
 
 const schema = z.object({ email: z.email(), password: z.string().min(8).max(200) });
 
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const parsed = schema.safeParse(await request.json().catch(() => null));
+  const parsed = schema.safeParse(await readJsonBody(request));
   if (!parsed.success) return NextResponse.json({ error: "Dados inválidos" }, { status: 400 });
 
   const credential = await getAdminCredential().catch(() => null);

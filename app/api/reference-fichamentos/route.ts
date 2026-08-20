@@ -13,6 +13,7 @@ import {
 import { listPreviewReferences } from "@/lib/reference-store";
 import { listPreviewFichamentoTopics } from "@/lib/fichamento-topic-store";
 import { crossOriginMutationResponse } from "@/lib/request-security";
+import { readJsonBody } from "@/lib/request-json";
 
 const referenceIdSchema = z.string().uuid();
 const entryFields = {
@@ -234,7 +235,7 @@ export async function POST(request: Request) {
   const originError = crossOriginMutationResponse(request);
   if (originError) return originError;
   if (!(await authorized())) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const parsed = entrySchema.safeParse(await request.json().catch(() => null));
+  const parsed = entrySchema.safeParse(await readJsonBody(request));
   if (!parsed.success) return NextResponse.json({ error: "Revise o conteúdo do fichamento." }, { status: 400 });
 
   try {
@@ -300,7 +301,7 @@ export async function PATCH(request: Request) {
   const originError = crossOriginMutationResponse(request);
   if (originError) return originError;
   if (!(await authorized())) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const parsed = updateSchema.safeParse(await request.json().catch(() => null));
+  const parsed = updateSchema.safeParse(await readJsonBody(request));
   if (!parsed.success) return NextResponse.json({ error: "Revise o conteúdo do fichamento." }, { status: 400 });
 
   try {
@@ -376,7 +377,7 @@ export async function DELETE(request: Request) {
   const originError = crossOriginMutationResponse(request);
   if (originError) return originError;
   if (!(await authorized())) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const parsed = deleteSchema.safeParse(await request.json().catch(() => null));
+  const parsed = deleteSchema.safeParse(await readJsonBody(request));
   if (!parsed.success) return NextResponse.json({ error: "Registro do fichamento inválido." }, { status: 400 });
 
   if (usingPreviewStore()) {

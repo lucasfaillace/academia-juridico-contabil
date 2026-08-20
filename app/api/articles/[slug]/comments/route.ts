@@ -6,6 +6,7 @@ import { listPreviewComments, savePreviewComment } from "@/lib/comment-store";
 import { getPool, hasDatabaseConfig } from "@/lib/db";
 import { usesFileContentFallback } from "@/lib/preview-store";
 import { consumeRateLimit, crossOriginMutationResponse, requestAddress } from "@/lib/request-security";
+import { readJsonBody } from "@/lib/request-json";
 
 const commentSchema = z.object({
   authorName: z.string().trim().min(2).max(100),
@@ -58,7 +59,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     );
   }
 
-  const parsed = commentSchema.safeParse(await request.json());
+  const parsed = commentSchema.safeParse(await readJsonBody(request));
   if (!parsed.success) {
     return NextResponse.json({ error: "Informe seu nome e escreva um comentário entre 2 e 4.000 caracteres." }, { status: 400 });
   }

@@ -14,6 +14,7 @@ import { usesFileContentFallback } from "@/lib/preview-store";
 import { listPreviewFichamentos, unlinkPreviewFichamentoTopic } from "@/lib/reference-fichamento-store";
 import { listPreviewReferences } from "@/lib/reference-store";
 import { crossOriginMutationResponse } from "@/lib/request-security";
+import { readJsonBody } from "@/lib/request-json";
 
 const topicSchema = z.object({ name: z.string().trim().min(2).max(120) });
 const updateTopicSchema = topicSchema.extend({ id: z.string().uuid() });
@@ -64,7 +65,7 @@ export async function PATCH(request: Request) {
   const originError = crossOriginMutationResponse(request);
   if (originError) return originError;
   if (!(await authorized())) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const parsed = updateTopicSchema.safeParse(await request.json().catch(() => null));
+  const parsed = updateTopicSchema.safeParse(await readJsonBody(request));
   if (!parsed.success) return NextResponse.json({ error: "Informe um nome válido para o tema." }, { status: 400 });
 
   try {
@@ -89,7 +90,7 @@ export async function DELETE(request: Request) {
   const originError = crossOriginMutationResponse(request);
   if (originError) return originError;
   if (!(await authorized())) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const parsed = deleteTopicSchema.safeParse(await request.json().catch(() => null));
+  const parsed = deleteTopicSchema.safeParse(await readJsonBody(request));
   if (!parsed.success) return NextResponse.json({ error: "Tema inválido." }, { status: 400 });
 
   try {
@@ -129,7 +130,7 @@ export async function POST(request: Request) {
   const originError = crossOriginMutationResponse(request);
   if (originError) return originError;
   if (!(await authorized())) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  const parsed = topicSchema.safeParse(await request.json().catch(() => null));
+  const parsed = topicSchema.safeParse(await readJsonBody(request));
   if (!parsed.success) return NextResponse.json({ error: "Informe um tema com pelo menos dois caracteres." }, { status: 400 });
 
   try {
