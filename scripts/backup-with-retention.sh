@@ -1,14 +1,12 @@
 #!/usr/bin/env sh
 set -eu
 
-# Backup com retenção automática e economia de espaço
-# Uso: ./scripts/backup-with-retention.sh <BACKUP_DIR> [DAYS_TO_KEEP]
-# Padrão: 7 dias de retenção
+# Backup com retenção automática: manter apenas os 3 backups mais recentes
+# Uso: ./scripts/backup-with-retention.sh <BACKUP_DIR>
+# Mantém: backup atual + 2 anteriores (idealmente com 30 dias entre cada)
 
 backup_root="${1:-./backups}"
-days_to_keep="${2:-7}"
-seconds_to_keep=$((days_to_keep * 24 * 60 * 60))
-current_time=$(date +%s)
+max_backups=3
 
 mkdir -p "$backup_root"
 
@@ -37,31 +35,34 @@ docker compose exec -T app tar -C /app/storage/uploads -czf - . > "$destination/
 (cd "$destination" && sha256sum postgres.dump uploads.tar.gz manifest.txt > SHA256SUMS)
 chmod 600 "$destination"/*
 
-# Limpar backups antigos
-echo "🗑️  Limpando backups com mais de $days_to_keep dias..."
-deleted_count=0
-for backup_dir in "$backup_root"/*/; do
-  [ -d "$backup_dir" ] || continue
-  backup_time=$(date -d "$(basename \"$backup_dir\" | sed 's/T/ /' | sed 's/Z/)" +%s 2>/dev/null || echo 0)
-  age=$((current_time - backup_time))
-  
-  if [ "$age" -gt "$seconds_to_keep" ]; then
-    size_mb=$(du -sm "$backup_dir" | cut -f1)
-    rm -rf "$backup_dir"
-    echo "  ✓ Removido: $(basename \"$backup_dir\") ($size_mb MB)"
-    deleted_count=$((deleted_count + 1))
-  fi
-done
+# Remover backups antigos mantendo apenas os 3 mais recentes
+echo "🗑️  Mantendo apenas os 3 backups mais recentes..."
+backup_count=$(find "$backup_root" -mindepth 1 -maxdepth 1 -type d | wc -l)
 
-if [ "$deleted_count" -eq 0 ]; then
-  echo "  ✓ Nenhum backup expirou"
+if [ "$backup_count" -gt "$max_backups" ]; then
+  # Listar backups por ordem de modificação (mais antigos primeiro)
+  find "$backup_root" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' | \
+    sort -n | \
+    head -n $((backup_count - max_backups)) | \
+    cut -d' ' -f2- | \
+    while read backup_dir; do
+      if [ -d "$backup_dir" ]; then
+        size_mb=$(du -sm "$backup_dir" 2>/dev/null | cut -f1 || echo "?")
+        rm -rf "$backup_dir"
+        echo "  ✓ Removido: $(basename "$backup_dir") ($size_mb MB)"
+      fi
+    done
+else
+  echo "  ✓ Nenhum backup expirou (total: $backup_count/$max_backups)"
 fi
 
-# Estatísticas
-total_size=$(du -sh "$backup_root" | cut -f1)
+# Estatísticas finais
+total_size=$(du -sh "$backup_root" 2>/dev/null | cut -f1 || echo "0")
+backup_count_final=$(find "$backup_root" -mindepth 1 -maxdepth 1 -type d | wc -l)
+
 echo ""
 echo "✅ Backup concluído em: $destination"
-echo "📊 Tamanho do diretório: $total_size"
-echo "📋 Retenção: $days_to_keep dias"
+echo "📊 Tamanho total: $total_size (máximo: ~3 backups mantidos)"
+echo "📋 Backups armazenados: $backup_count_final/$max_backups"
 echo ""
 echo "⚠️  Não esqueça de copiar backups para armazenamento externo e cifrado!"
