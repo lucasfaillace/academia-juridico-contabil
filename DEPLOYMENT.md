@@ -161,6 +161,8 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
+O Nginx aceita corpos de até **21 MiB**. A aplicação mantém o limite efetivo do arquivo PDF em **20 MiB** e valida tanto o tipo declarado quanto a assinatura `%PDF-`; o 1 MiB adicional serve apenas para acomodar os metadados do formulário multipart. Assim, um PDF válido no limite anunciado não é recusado antecipadamente pelo proxy. O limite também permanece compatível com o proxy opcional da Cloudflare no plano gratuito.
+
 Confirme que o contêiner responde apenas localmente:
 
 ```bash

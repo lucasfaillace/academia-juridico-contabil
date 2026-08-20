@@ -7,7 +7,9 @@ server {
     listen [::]:80;
     server_name academia.exemplo.br www.academia.exemplo.br;
 
-    client_max_body_size 16m;
+    # O arquivo PDF é limitado a 20 MiB pela aplicação; 1 MiB adicional
+    # acomoda o envelope multipart sem ampliar o limite efetivo do arquivo.
+    client_max_body_size 21m;
     server_tokens off;
     gzip on;
     gzip_comp_level 5;

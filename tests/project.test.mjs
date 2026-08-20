@@ -261,6 +261,27 @@ test("mantém publicações acadêmicas separadas do blog e com cadastro bibliog
   assert.match(migration, /CHECK \(status IN \('draft', 'published'\)\)/);
 });
 
+test("mantém o limite de PDF coerente entre aplicação, painel e Nginx", async () => {
+  const [uploadApi, dashboard, nginx, deployment] = await Promise.all([
+    readFile(new URL("app/api/uploads/publications/route.ts", root), "utf8"),
+    readFile(new URL("components/AdminDashboard.tsx", root), "utf8"),
+    readFile(new URL("nginx/academia.conf.example", root), "utf8"),
+    readFile(new URL("DEPLOYMENT.md", root), "utf8"),
+  ]);
+
+  const applicationLimit = uploadApi.match(/MAX_PDF_SIZE\s*=\s*(\d+)\s*\*\s*1024\s*\*\s*1024/);
+  const proxyLimit = nginx.match(/client_max_body_size\s+(\d+)m/);
+
+  assert.equal(Number(applicationLimit?.[1]), 20);
+  assert.equal(Number(proxyLimit?.[1]), 21);
+  assert.ok(Number(proxyLimit?.[1]) > Number(applicationLimit?.[1]));
+  assert.match(uploadApi, /upload\.size === 0 \|\| upload\.size > MAX_PDF_SIZE/);
+  assert.match(uploadApi, /upload\.type !== "application\/pdf"/);
+  assert.match(uploadApi, /%PDF-/);
+  assert.match(dashboard, /PDF de até 20 MB/);
+  assert.match(deployment, /limite efetivo do arquivo PDF em \*\*20 MiB\*\*/);
+});
+
 test("seleciona tags por pesquisa e preserva a ordem de inserção", async () => {
   const [dashboard, articleApi, repository, migration, styles] = await Promise.all([
     readFile(new URL("components/AdminDashboard.tsx", root), "utf8"),
