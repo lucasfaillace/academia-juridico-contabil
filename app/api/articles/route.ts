@@ -197,8 +197,8 @@ export async function POST(request: Request) {
     if (parsed.data.originalSlug) {
       result = await client.query(
         `UPDATE articles
-         SET title=$1, slug=$2, summary=$3, content_html=$4, youtube_url=$5, status=$6, author_name=$7, author_names=$8::jsonb, category_id=$9,
-             updated_at=NOW(), published_at=CASE WHEN $6='published' THEN COALESCE(published_at,NOW()) ELSE NULL END
+         SET title=$1, slug=$2, summary=$3, content_html=$4, youtube_url=$5, status=$6::varchar, author_name=$7, author_names=$8::jsonb, category_id=$9,
+             updated_at=NOW(), published_at=CASE WHEN $6::text='published' THEN COALESCE(published_at,NOW()) ELSE NULL END
          WHERE slug=$10
          RETURNING id, slug, status`,
         [parsed.data.title, slug, parsed.data.summary, content, parsed.data.youtubeUrl || null, parsed.data.status, primaryAuthor, JSON.stringify(authors), categoryId, parsed.data.originalSlug],
@@ -207,7 +207,7 @@ export async function POST(request: Request) {
     if (!result || !result.rowCount) {
       result = await client.query(
         `INSERT INTO articles (title, slug, summary, content_html, youtube_url, status, author_name, author_names, category_id, published_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,CASE WHEN $6='published' THEN NOW() ELSE NULL END)
+         VALUES ($1,$2,$3,$4,$5,$6::varchar,$7,$8::jsonb,$9,CASE WHEN $6::text='published' THEN NOW() ELSE NULL END)
          ON CONFLICT (slug) DO UPDATE SET
            title=EXCLUDED.title, summary=EXCLUDED.summary, content_html=EXCLUDED.content_html, youtube_url=EXCLUDED.youtube_url,
            status=EXCLUDED.status, author_name=EXCLUDED.author_name, author_names=EXCLUDED.author_names, category_id=EXCLUDED.category_id,

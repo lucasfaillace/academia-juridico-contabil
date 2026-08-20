@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 
 const root = new URL("../", import.meta.url);
@@ -96,13 +96,23 @@ test("mantém referências abreviadas vinculadas e contabilizadas", async () => 
 });
 
 test("não contém dependências estruturais de edge ou serverless", async () => {
-  const [packageJson, dockerfile, deployment] = await Promise.all([
+  const [packageJson, dockerfile, deployment, compose, startProduction] = await Promise.all([
     readFile(new URL("package.json", root), "utf8"),
     readFile(new URL("Dockerfile", root), "utf8"),
     readFile(new URL("DEPLOYMENT.md", root), "utf8"),
+    readFile(new URL("docker-compose.yml", root), "utf8"),
+    readFile(new URL("scripts/start-production.mjs", root), "utf8"),
   ]);
   assert.doesNotMatch(packageJson, /vinext|wrangler|cloudflare|drizzle-orm/);
   assert.match(dockerfile, /node:22-alpine/);
+  assert.match(dockerfile, /pnpm-workspace\.yaml/);
+  assert.match(dockerfile, /sharp-libvips-linuxmusl/);
+  assert.match(dockerfile, /scripts\/start-production\.mjs/);
+  assert.match(compose, /cap_drop:[\s\S]*- ALL/);
+  assert.doesNotMatch(compose, /read_only:\s*true/);
+  assert.match(startProduction, /NEXT_PUBLIC_SITE_URL/);
+  assert.match(startProduction, /ADMIN_PASSWORD_HASH/);
+  await assert.rejects(access(new URL("middleware.ts", root)));
   assert.match(deployment, /Certbot/);
   assert.match(deployment, /CONFIRM_RESTORE=RESTAURAR/);
 });

@@ -110,7 +110,8 @@ services:
       - next_cache:/app/.next/cache
     ports:
       - "127.0.0.1:${APP_PORT:-3000}:3000"
-    read_only: true
+    cap_drop:
+      - ALL
     tmpfs:
       - /tmp:size=64m,mode=1777
     security_opt:

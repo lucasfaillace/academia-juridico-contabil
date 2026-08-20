@@ -16,10 +16,14 @@ docker compose exec -T app tar -C /app/storage/uploads -czf - . > "$destination/
 {
   echo "created_at_utc=$timestamp"
   echo "git_commit=$(git rev-parse HEAD 2>/dev/null || echo unavailable)"
-  echo "compose_project=academia-juridico-contabil"
+  echo "compose_project=${COMPOSE_PROJECT_NAME:-academia-juridico-contabil}"
 } > "$destination/manifest.txt"
 
-(cd "$destination" && sha256sum postgres.dump uploads.tar.gz manifest.txt > SHA256SUMS)
+if command -v sha256sum >/dev/null 2>&1; then
+  (cd "$destination" && sha256sum postgres.dump uploads.tar.gz manifest.txt > SHA256SUMS)
+else
+  (cd "$destination" && shasum -a 256 postgres.dump uploads.tar.gz manifest.txt > SHA256SUMS)
+fi
 chmod 600 "$destination"/*
 echo "Backup concluído em: $destination"
 echo "Copie esse diretório para armazenamento externo e cifrado. O arquivo .env não está incluído."

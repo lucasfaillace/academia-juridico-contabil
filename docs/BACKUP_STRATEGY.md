@@ -33,8 +33,8 @@ Se você rodar `./scripts/backup.sh` diariamente:
 O novo script `backup-with-retention.sh`:
 
 1. **Cria o backup** (igual ao anterior)
-2. **Deleta automaticamente** backups mais antigos que 7 dias
-3. **Economiza espaço**: Mantém ~7 cópias no máximo
+2. **Deleta automaticamente** os backups excedentes mais antigos
+3. **Economiza espaço**: por padrão, mantém no máximo as 7 cópias mais recentes
 
 ### Implementação
 
@@ -49,7 +49,7 @@ O novo script `backup-with-retention.sh`:
 
 ### Espaço Consumido com Retenção
 
-Mantendo **7 dias de backups**:
+Com um agendamento diário mantendo **7 cópias recentes**:
 
 | Tamanho por backup | Espaço máximo | Observação |
 |---|---|---|
@@ -60,13 +60,13 @@ Mantendo **7 dias de backups**:
 ### Cronograma Sugerido
 
 ```bash
-# Backup diário com 7 dias de retenção (padrão)
+# Backup diário mantendo as 7 cópias mais recentes (padrão)
 15 3 * * * cd /opt/academia/app && ./scripts/backup-with-retention.sh /var/backups/academia 7 >> /var/backups/academia/backup.log 2>&1
 
-# Ou: Backup diário com 30 dias de retenção (mais conservador)
+# Ou: Backup diário mantendo as 30 cópias mais recentes
 15 3 * * * cd /opt/academia/app && ./scripts/backup-with-retention.sh /var/backups/academia 30 >> /var/backups/academia/backup.log 2>&1
 
-# Ou: Backup 3x por semana com 21 dias de retenção (economiza espaço)
+# Ou: Backup 3x por semana mantendo as 21 cópias mais recentes
 15 3 * * 0,3,5 cd /opt/academia/app && ./scripts/backup-with-retention.sh /var/backups/academia 21 >> /var/backups/academia/backup.log 2>&1
 ```
 
@@ -137,4 +137,4 @@ curl -fsS http://127.0.0.1:3000/api/health
 | **30 dias** | ~1.5 GB-15 GB | 30 | Diário |
 | **21 dias + 3x/semana** | ~700 MB-7 GB | 21 | Terça, quinta, sábado |
 
-**Recomendação para VPS 20 GB SSD**: Use 7-14 dias de retenção.
+**Recomendação para VPS 20 GB SSD**: se o agendamento for diário, mantenha de 7 a 14 cópias recentes.

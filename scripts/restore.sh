@@ -11,7 +11,11 @@ if [ "${CONFIRM_RESTORE:-}" != "RESTAURAR" ]; then
   exit 1
 fi
 
-(cd "$backup_directory" && sha256sum -c SHA256SUMS)
+if command -v sha256sum >/dev/null 2>&1; then
+  (cd "$backup_directory" && sha256sum -c SHA256SUMS)
+else
+  (cd "$backup_directory" && shasum -a 256 -c SHA256SUMS)
+fi
 docker compose up -d db
 docker compose stop app 2>/dev/null || true
 
