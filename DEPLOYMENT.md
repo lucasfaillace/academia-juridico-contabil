@@ -167,6 +167,8 @@ O Nginx aceita corpos de até **21 MiB**. A aplicação mantém o limite efetivo
 
 O arquivo também limita login, contato, comentários e registro de visualizações no proxy. A aplicação mantém uma segunda proteção para esses endpoints públicos. Esse limitador interno usa memória e é adequado ao serviço `app` único definido neste Compose; seus contadores são reiniciados junto com o processo. Antes de executar múltiplas réplicas, configure um limitador compartilhado em PostgreSQL/Redis ou no proxy. A Cloudflare pode acrescentar proteção, mas não é requisito para esses controles.
 
+Em produção, a aplicação envia uma Política de Segurança de Conteúdo efetiva. Scripts não podem usar `eval`, manipuladores JavaScript em atributos HTML são bloqueados e imagens ficam restritas ao próprio site e aos dados locais usados pelo editor. O carregamento externo permitido limita-se ao Google Analytics consentido e aos domínios de vídeo previstos. A diretiva `unsafe-inline` permanece somente para scripts e estilos inseridos pelo runtime do Next.js e por componentes que usam estilos calculados. Um nonce por requisição não foi adotado porque tornaria as páginas estáticas dinâmicas e eliminaria parte relevante do cache; essa decisão deve ser revista antes de introduzir scripts externos adicionais.
+
 Confirme que o contêiner responde apenas localmente:
 
 ```bash
@@ -436,6 +438,7 @@ curl -fsS http://127.0.0.1:3000/api/health
 - [ ] Migrações aparecem como aplicadas.
 - [ ] Nginx passa em `sudo nginx -t`.
 - [ ] HTTPS responde e `certbot renew --dry-run` passa.
+- [ ] A resposta HTTPS contém `Content-Security-Policy`, sem `unsafe-eval`, e não apresenta violações no console nas páginas públicas ou administrativas.
 - [ ] Login administrativo funciona.
 - [ ] Publicação de artigo, notas de rodapé e persistência após reinício foram testadas.
 - [ ] Consentimento de estatísticas foi testado nas opções aceitar, recusar e rever preferências.

@@ -10,20 +10,33 @@ const publicEdgeCacheHeaders = [
   { key: "Cloudflare-CDN-Cache-Control", value: "public, s-maxage=300, stale-while-revalidate=86400" },
 ];
 
-const reportOnlyPolicy = [
+const contentSecurityPolicy = [
   "default-src 'self'",
   "base-uri 'self'",
   "form-action 'self'",
   "frame-ancestors 'none'",
   "object-src 'none'",
-  "img-src 'self' data: blob:",
+  "img-src 'self' data: blob: https://www.googletagmanager.com https://www.google-analytics.com",
   "font-src 'self' data:",
   "style-src 'self' 'unsafe-inline'",
   "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com",
-  "connect-src 'self' https://www.google-analytics.com https://*.google-analytics.com",
+  "script-src-attr 'none'",
+  "connect-src 'self' https://www.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com",
   "frame-src https://www.youtube.com https://www.youtube-nocookie.com",
   "media-src 'self'",
+  "manifest-src 'self'",
+  "worker-src 'self' blob:",
 ].join("; ");
+
+const securityHeaders = [
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()" },
+  ...(process.env.NODE_ENV === "production"
+    ? [{ key: "Content-Security-Policy", value: contentSecurityPolicy }]
+    : []),
+];
 
 const nextConfig: NextConfig = {
   distDir: process.env.NEXT_DIST_DIR || ".next",
@@ -34,11 +47,7 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       { source: "/(.*)", headers: [
-        { key: "X-Content-Type-Options", value: "nosniff" },
-        { key: "X-Frame-Options", value: "DENY" },
-        { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-        { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()" },
-        { key: "Content-Security-Policy-Report-Only", value: reportOnlyPolicy },
+        ...securityHeaders,
       ] },
       { source: "/admin/:path*", headers: noStoreHeaders },
       { source: "/api/:path*", headers: noStoreHeaders },

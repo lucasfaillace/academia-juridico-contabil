@@ -62,7 +62,12 @@ test("inclui controles de segurança e portabilidade", async () => {
   assert.match(login, /isSameOriginMutation/);
   assert.match(articleApi, /allowedSchemes: \["http", "https", "mailto"\]/);
   assert.match(articlePage, /replace\(\/<\/g, "\\\\u003c"\)/);
-  assert.match(nextConfig, /Content-Security-Policy-Report-Only/);
+  assert.match(nextConfig, /key: "Content-Security-Policy"/);
+  assert.doesNotMatch(nextConfig, /Content-Security-Policy-Report-Only/);
+  assert.doesNotMatch(nextConfig, /unsafe-eval/);
+  assert.doesNotMatch(nextConfig, /img-src https:/);
+  assert.match(nextConfig, /img-src 'self' data: blob: https:\/\/www\.googletagmanager\.com https:\/\/www\.google-analytics\.com/);
+  assert.match(nextConfig, /script-src-attr 'none'/);
   assert.match(nextConfig, /Cloudflare-CDN-Cache-Control/);
   assert.match(nextConfig, /source: "\/blog", headers: noStoreHeaders/);
   assert.match(nextConfig, /source: "\/blog\/:slug", headers: publicEdgeCacheHeaders/);
