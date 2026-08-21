@@ -147,7 +147,11 @@ test("não contém dependências estruturais de edge ou serverless", async () =>
 });
 
 test("mantém CI com build, PostgreSQL, migrações e validação Docker", async () => {
-  const workflow = await readFile(new URL(".github/workflows/ci.yml", root), "utf8");
+  const [workflow, packageJson, productionCheck] = await Promise.all([
+    readFile(new URL(".github/workflows/ci.yml", root), "utf8"),
+    readFile(new URL("package.json", root), "utf8"),
+    readFile(new URL("scripts/check-production.sh", root), "utf8"),
+  ]);
   assert.match(workflow, /permissions:\s*\n\s*contents: read/);
   assert.match(workflow, /postgres:17-alpine/);
   assert.match(workflow, /pnpm install --frozen-lockfile/);
@@ -158,6 +162,13 @@ test("mantém CI com build, PostgreSQL, migrações e validação Docker", async
   assert.match(workflow, /pnpm build/);
   assert.match(workflow, /pnpm audit --prod/);
   assert.match(workflow, /\.\/scripts\/check-production\.sh/);
+  assert.match(packageJson, /node --experimental-strip-types --test tests\/\*\.test\.mjs/);
+  assert.match(productionCheck, /academia-production-check-/);
+  assert.match(productionCheck, /compose up -d --wait/);
+  assert.match(productionCheck, /compose run --rm migrate/);
+  assert.match(productionCheck, /api\/health/);
+  assert.match(productionCheck, /SELECT count\(\*\) FROM app_migrations/);
+  assert.match(productionCheck, /compose down --volumes --remove-orphans/);
 });
 
 test("oferece comentários encadeados com identificação do autor", async () => {

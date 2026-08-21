@@ -99,6 +99,19 @@ Valide sem exibir segredos:
 docker compose config --quiet
 ```
 
+Antes da implantação, valide a imagem e o ciclo completo de produção em um
+projeto Compose isolado:
+
+```bash
+./scripts/check-production.sh
+```
+
+O script constrói a imagem, cria banco e volumes temporários sob o prefixo
+`academia-production-check-`, executa as migrações duas vezes, inicia o mesmo
+entrypoint usado em produção e consulta `/api/health`. A limpeza alcança somente
+esse projeto temporário; os volumes `postgres_data` e `uploads_data` da aplicação
+real não são abertos nem removidos.
+
 ## 5. Construir e iniciar os serviços
 
 Primeiro construa a imagem para poder gerar a senha administrativa:

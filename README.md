@@ -4,7 +4,7 @@ Aplicação Next.js/Node.js com PostgreSQL e editor visual próprio, incluindo n
 
 ## Desenvolvimento
 
-Requisitos: Node.js 22+, pnpm e PostgreSQL 15+.
+Requisitos: Node.js 22.13 ou mais recente, pnpm e PostgreSQL 15+.
 
 ```bash
 cp .env.example .env
@@ -41,3 +41,9 @@ Validação adicional, em uma máquina com Docker:
 ```bash
 ./scripts/check-production.sh
 ```
+
+Essa validação cria um projeto Compose temporário e isolado, constrói a imagem,
+executa as migrações duas vezes, inicia o entrypoint real de produção e consulta
+o healthcheck. Ao terminar, remove somente os contêineres e volumes identificados
+pelo prefixo exclusivo `academia-production-check-`; os volumes da aplicação não
+são acessados.

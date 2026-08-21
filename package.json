@@ -11,7 +11,7 @@
     "preview:local": "CONTENT_FALLBACK_MODE=file next dev -p 3022",
     "build": "next build",
     "start": "next start",
-    "test": "node --test tests/*.test.mjs",
+    "test": "node --experimental-strip-types --test tests/*.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern '.next*' --ignore-pattern work",
     "typecheck": "tsc --noEmit",
     "db:migrate": "node scripts/migrate.mjs",
