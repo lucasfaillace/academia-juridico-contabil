@@ -2,8 +2,8 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import type { PoolClient } from "pg";
-import sanitizeHtml from "sanitize-html";
 import { z } from "zod";
+import { sanitizeArticleContent } from "@/lib/article-content-security";
 import { verifySession } from "@/lib/auth";
 import { extractFootnoteReferenceLinks } from "@/lib/bibliographic-references";
 import { deletePreviewCommentsForArticle } from "@/lib/comment-store";
@@ -47,57 +47,6 @@ function slugify(value: string) {
 
 function authenticated(token: string | undefined) {
   return verifySession(token);
-}
-
-function sanitizeContent(content: string) {
-  return sanitizeHtml(content, {
-    allowedTags: sanitizeHtml.defaults.allowedTags.concat(["img", "picture", "source", "figure", "figcaption", "table", "thead", "tbody", "tfoot", "tr", "th", "td", "caption", "sup", "sub", "u", "section"]),
-    allowedAttributes: {
-      a: ["href", "id", "aria-label", "class", "target", "rel"],
-      img: ["src", "alt", "title", "width", "height", "loading", "decoding"],
-      source: ["srcset", "media", "type", "width", "height"],
-      figure: ["data-article-image", "data-image-width", "data-image-align", "data-image-fit", "data-image-zoom", "data-image-border", "data-image-original-src", "data-image-mobile-src", "data-image-trimmed-src"],
-      div: ["data-article-toc", "data-article-formula", "data-latex", "data-display", "data-image-frame"],
-      sup: [
-        "id",
-        "title",
-        "data-footnote",
-        "data-footnote-id",
-        "data-footnote-number",
-        "data-footnote-text",
-        "data-footnote-reference-id",
-        "data-footnote-citation-details",
-        "data-footnote-segments",
-      ],
-      section: ["id", "class"],
-      "*": ["id", "class"],
-    },
-    allowedSchemes: ["http", "https", "mailto"],
-    allowedSchemesByTag: { img: ["http", "https", "data"] },
-    transformTags: {
-      h1: "h2",
-      a: (_tagName, attributes) => ({
-        tagName: "a",
-        attribs: attributes.target === "_blank"
-          ? { ...attributes, rel: "noopener noreferrer" }
-          : attributes,
-      }),
-      img: (_tagName, attributes) => {
-        const dataSourceIsSafe = !attributes.src?.startsWith("data:")
-          || /^data:image\/(?:jpeg|png|webp);base64,/i.test(attributes.src);
-        const safeAttributes = { ...attributes };
-        if (!dataSourceIsSafe) delete safeAttributes.src;
-        return {
-          tagName: "img",
-          attribs: {
-            ...safeAttributes,
-            loading: "lazy",
-            decoding: "async",
-          },
-        };
-      },
-    },
-  });
 }
 
 async function invalidateArticlePages(slug: string, previousSlug?: string) {
@@ -307,7 +256,7 @@ export async function POST(request: Request) {
 
   const slug = slugify(parsed.data.title);
   const categorySlug = slugify(parsed.data.category || "Sem categoria");
-  const content = sanitizeContent(parsed.data.content);
+  const content = sanitizeArticleContent(parsed.data.content);
   const authors = parsed.data.authors.map((name) => name.trim()).filter(Boolean);
   const primaryAuthor = authors[0] || process.env.DEFAULT_AUTHOR_NAME || "Autor";
 

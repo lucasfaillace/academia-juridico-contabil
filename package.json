@@ -12,6 +12,7 @@
     "build": "next build",
     "start": "next start",
     "test": "node --experimental-strip-types --test tests/*.test.mjs",
+    "audit:csp": "node scripts/audit-production-csp.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern '.next*' --ignore-pattern work",
     "typecheck": "tsc --noEmit",
     "db:migrate": "node scripts/migrate.mjs",

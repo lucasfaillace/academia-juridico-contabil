@@ -16,10 +16,11 @@ test("usa a identidade e não mantém o preview inicial", async () => {
 });
 
 test("inclui controles de segurança e portabilidade", async () => {
-  const [compose, env, migration, articleApi, imageApi, editor, articlePage, articleHtml, richContent, css, auth, login, nextConfig, cloudflareCache] = await Promise.all([
+  const [compose, env, migration, articleApi, articleContentSecurity, imageApi, editor, articlePage, articleHtml, richContent, css, auth, login, nextConfig, cloudflareCache] = await Promise.all([
     readFile(new URL("docker-compose.yml", root), "utf8"), readFile(new URL(".env.example", root), "utf8"),
     readFile(new URL("migrations/001_initial.sql", root), "utf8"),
     readFile(new URL("app/api/articles/route.ts", root), "utf8"),
+    readFile(new URL("lib/article-content-security.ts", root), "utf8"),
     readFile(new URL("app/api/uploads/images/route.ts", root), "utf8"),
     readFile(new URL("components/RichEditor.tsx", root), "utf8"),
     readFile(new URL("components/ArticlePageView.tsx", root), "utf8"),
@@ -32,18 +33,18 @@ test("inclui controles de segurança e portabilidade", async () => {
     readFile(new URL("lib/cloudflare-cache.ts", root), "utf8"),
   ]);
   assert.match(compose, /postgres:17-alpine/); assert.match(env, /AUTH_SECRET/); assert.match(migration, /CHECK \(status IN \('draft','published'\)\)/);
-  assert.match(articleApi, /sanitizeHtml/); assert.match(articleApi, /data-footnote/); assert.match(editor, /Inserir nota de rodapé/);
+  assert.match(articleApi, /sanitizeArticleContent/); assert.match(articleContentSecurity, /sanitizeHtml/); assert.match(articleContentSecurity, /data-footnote/); assert.match(editor, /Inserir nota de rodapé/);
   assert.match(editor, /footnote-number/); assert.match(editor, /footnote-formatting/);
   assert.match(articleHtml, /addFootnoteNumberLinks/);
   assert.match(editor, /Inserir sumário/); assert.match(editor, /Inserir imagem/); assert.match(imageApi, /MAX_IMAGE_SIZE/);
   assert.match(editor, /updateSelectedImage/); assert.match(articleApi, /youtubeUrl/);
   assert.match(editor, /data-image-zoom/); assert.match(editor, /Permitir ampliação/);
-  assert.match(articleApi, /data-image-zoom/);
+  assert.match(articleContentSecurity, /data-image-zoom/);
   assert.match(editor, /data-image-border/); assert.match(editor, /Borda do site ativada/); assert.match(editor, /Adicionar borda do site/);
-  assert.match(articleApi, /data-image-border/); assert.match(css, /data-image-border="site"/);
+  assert.match(articleContentSecurity, /data-image-border/); assert.match(css, /data-image-border="site"/);
   assert.match(editor, /data-image-fit/); assert.match(editor, /Ajustar margens automaticamente/); assert.match(editor, /duas versões WebP/); assert.match(editor, /data-image-frame/);
   assert.match(editor, /cropEmptyImageMargins/); assert.match(editor, /data-image-original-src/); assert.match(editor, /data-image-trimmed-src/);
-  assert.match(articleApi, /data-image-fit/); assert.match(css, /data-image-fit="crop"/);
+  assert.match(articleContentSecurity, /data-image-fit/); assert.match(css, /data-image-fit="crop"/);
   assert.match(css, /\.editor-sticky-controls \{ position:sticky/);
   assert.match(css, /\.article-content li>p \{ margin:0/);
   assert.match(articlePage, /ArticleRichContent/); assert.match(richContent, /role="dialog"/);
@@ -60,13 +61,15 @@ test("inclui controles de segurança e portabilidade", async () => {
   assert.match(auth, /AUTH_SECRET precisa conter pelo menos 32 caracteres/);
   assert.match(login, /consumeRateLimit/);
   assert.match(login, /isSameOriginMutation/);
-  assert.match(articleApi, /allowedSchemes: \["http", "https", "mailto"\]/);
+  assert.match(articleContentSecurity, /allowedSchemes: \["http", "https", "mailto"\]/);
   assert.match(articlePage, /replace\(\/<\/g, "\\\\u003c"\)/);
   assert.match(nextConfig, /key: "Content-Security-Policy"/);
   assert.doesNotMatch(nextConfig, /Content-Security-Policy-Report-Only/);
   assert.doesNotMatch(nextConfig, /unsafe-eval/);
   assert.doesNotMatch(nextConfig, /img-src https:/);
   assert.match(nextConfig, /img-src 'self' data: blob: https:\/\/www\.googletagmanager\.com https:\/\/www\.google-analytics\.com/);
+  assert.match(nextConfig, /script-src-elem 'self' 'unsafe-inline' https:\/\/www\.googletagmanager\.com/);
+  assert.match(nextConfig, /style-src-attr 'unsafe-inline'/);
   assert.match(nextConfig, /script-src-attr 'none'/);
   assert.match(nextConfig, /Cloudflare-CDN-Cache-Control/);
   assert.match(nextConfig, /source: "\/blog", headers: noStoreHeaders/);
@@ -160,6 +163,8 @@ test("mantém CI com build, PostgreSQL, migrações e validação Docker", async
   assert.match(workflow, /pnpm test/);
   assert.equal((workflow.match(/pnpm db:migrate/g) || []).length, 2);
   assert.match(workflow, /pnpm build/);
+  assert.match(workflow, /pnpm audit:csp/);
+  assert.match(packageJson, /"audit:csp": "node scripts\/audit-production-csp\.mjs"/);
   assert.match(workflow, /pnpm audit --prod/);
   assert.match(workflow, /\.\/scripts\/check-production\.sh/);
   assert.match(packageJson, /node --experimental-strip-types --test tests\/\*\.test\.mjs/);
@@ -425,10 +430,10 @@ test("apresenta a Academia e integra o perfil do fundador sem criar nova aba", a
 });
 
 test("insere, edita e remove links relativos para artigos publicados", async () => {
-  const [dashboard, editor, articleApi] = await Promise.all([
+  const [dashboard, editor, articleContentSecurity] = await Promise.all([
     readFile(new URL("components/AdminDashboard.tsx", root), "utf8"),
     readFile(new URL("components/RichEditor.tsx", root), "utf8"),
-    readFile(new URL("app/api/articles/route.ts", root), "utf8"),
+    readFile(new URL("lib/article-content-security.ts", root), "utf8"),
   ]);
   assert.match(dashboard, /article\.status === "published"/);
   assert.match(editor, /Pesquisar pelo título/);
@@ -440,7 +445,7 @@ test("insere, edita e remove links relativos para artigos publicados", async () 
   assert.match(editor, /removeActiveInternalLink/);
   assert.match(editor, /selectionHasLink/);
   assert.match(editor, /unsetLink\(\)/);
-  assert.match(articleApi, /"target", "rel"/);
+  assert.match(articleContentSecurity, /"target", "rel"/);
 });
 
 test("cadastra múltiplas autorias por artigo e preserva a ordem pública", async () => {
@@ -464,9 +469,9 @@ test("cadastra múltiplas autorias por artigo e preserva a ordem pública", asyn
 });
 
 test("insere, edita, remove e reconhece links nas notas de rodapé", async () => {
-  const [editor, articleApi] = await Promise.all([
+  const [editor, articleContentSecurity] = await Promise.all([
     readFile(new URL("components/RichEditor.tsx", root), "utf8"),
-    readFile(new URL("app/api/articles/route.ts", root), "utf8"),
+    readFile(new URL("lib/article-content-security.ts", root), "utf8"),
   ]);
   assert.match(editor, /normalizeFootnoteUrl/);
   assert.match(editor, /autolink: true/);
@@ -482,16 +487,17 @@ test("insere, edita, remove e reconhece links nas notas de rodapé", async () =>
   assert.match(editor, /Remover link/);
   assert.match(editor, /noopener noreferrer/);
   assert.match(editor, /unsetLink\(\)/);
-  assert.match(articleApi, /a: \["href", "id", "aria-label", "class", "target", "rel"\]/);
+  assert.match(articleContentSecurity, /a: \["href", "id", "aria-label", "class", "target", "rel"\]/);
 });
 
 test("mantém referências únicas no painel e admite várias obras em uma mesma nota", async () => {
-  const [migration, formattingMigration, multipleMigration, referenceApi, articleApi, editor, referenceEditor, dashboard, articleHtml, store, segments] = await Promise.all([
+  const [migration, formattingMigration, multipleMigration, referenceApi, articleApi, articleContentSecurity, editor, referenceEditor, dashboard, articleHtml, store, segments] = await Promise.all([
     readFile(new URL("migrations/009_bibliographic_references.sql", root), "utf8"),
     readFile(new URL("migrations/010_bibliographic_reference_formatting.sql", root), "utf8"),
     readFile(new URL("migrations/011_multiple_references_per_footnote.sql", root), "utf8"),
     readFile(new URL("app/api/references/route.ts", root), "utf8"),
     readFile(new URL("app/api/articles/route.ts", root), "utf8"),
+    readFile(new URL("lib/article-content-security.ts", root), "utf8"),
     readFile(new URL("components/RichEditor.tsx", root), "utf8"),
     readFile(new URL("components/PublicationReferenceEditor.tsx", root), "utf8"),
     readFile(new URL("components/AdminDashboard.tsx", root), "utf8"),
@@ -514,8 +520,8 @@ test("mantém referências únicas no painel e admite várias obras em uma mesma
   assert.match(referenceApi, /reference_in_use/);
   assert.match(referenceApi, /ORDER BY lower\(br\.reference_text\)/);
   assert.match(articleApi, /syncFootnoteReferences/);
-  assert.match(articleApi, /data-footnote-reference-id/);
-  assert.match(articleApi, /data-footnote-segments/);
+  assert.match(articleContentSecurity, /data-footnote-reference-id/);
+  assert.match(articleContentSecurity, /data-footnote-segments/);
   assert.match(editor, /Monte a nota na ordem em que ela será lida/);
   assert.match(editor, /Adicionar texto/);
   assert.match(editor, /Adicionar referência/);
@@ -1008,12 +1014,12 @@ test("classifica os artigos por tags na listagem e mantém a página inicial enx
 });
 
 test("normaliza cada upload em somente duas versões WebP proporcionais", async () => {
-  const [uploadRoute, imageProcessing, mediaRoute, editor, articleRoute, exporter] = await Promise.all([
+  const [uploadRoute, imageProcessing, mediaRoute, editor, articleContentSecurity, exporter] = await Promise.all([
     readFile(new URL("app/api/uploads/images/route.ts", root), "utf8"),
     readFile(new URL("lib/image-processing.ts", root), "utf8"),
     readFile(new URL("app/media/[key]/route.ts", root), "utf8"),
     readFile(new URL("components/RichEditor.tsx", root), "utf8"),
-    readFile(new URL("app/api/articles/route.ts", root), "utf8"),
+    readFile(new URL("lib/article-content-security.ts", root), "utf8"),
     readFile(new URL("lib/article-word-export.ts", root), "utf8"),
   ]);
   assert.match(uploadRoute, /processArticleImage/);
@@ -1026,7 +1032,7 @@ test("normaliza cada upload em somente duas versões WebP proporcionais", async 
   assert.match(mediaRoute, /desktop\|mobile/);
   assert.match(editor, /\["picture"/);
   assert.match(editor, /mobileSrc: uploaded\.mobileUrl/);
-  assert.match(articleRoute, /"picture", "source"/);
+  assert.match(articleContentSecurity, /"picture", "source"/);
   assert.match(exporter, /findAll\(element\.children,[\s\S]*node\.name === "img"/);
 });
 

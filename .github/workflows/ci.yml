@@ -88,6 +88,9 @@ jobs:
       - name: Compilar a aplicação para produção
         run: pnpm build
 
+      - name: Auditar a política de segurança do artefato
+        run: pnpm audit:csp
+
       - name: Auditar dependências de produção
         run: pnpm audit --prod
 

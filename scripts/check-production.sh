@@ -45,6 +45,20 @@ compose exec -T app node -e '
     .catch(() => process.exit(1));
 '
 
+# Confere a política realmente emitida pelo servidor de produção, além da
+# auditoria estática do artefato executada antes da construção da imagem.
+compose exec -T app node -e '
+  fetch("http://127.0.0.1:3000/")
+    .then(async (response) => {
+      const csp = response.headers.get("content-security-policy") || "";
+      if (response.status !== 200
+        || !/script-src-attr\s+\x27none\x27/.test(csp)
+        || csp.includes("unsafe-eval")
+        || csp.includes("img-src https:")) process.exit(1);
+    })
+    .catch(() => process.exit(1));
+'
+
 # Executa novamente a imagem de migração para verificar idempotência e compara
 # o registro do banco com a quantidade de arquivos incluídos na imagem.
 compose run --rm migrate
