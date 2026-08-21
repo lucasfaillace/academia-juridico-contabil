@@ -38,11 +38,10 @@ function normalizeAddress(value: string | null) {
 }
 
 export function requestAddress(request: Request) {
-  return normalizeAddress(
-    request.headers.get("x-real-ip")
-      || request.headers.get("cf-connecting-ip")
-      || request.headers.get("x-forwarded-for"),
-  );
+  // Em produção, somente o Nginx pode alcançar a aplicação e ele sempre
+  // sobrescreve este cabeçalho. Cabeçalhos enviados diretamente pelo cliente,
+  // inclusive os da Cloudflare, não participam da identidade do limitador.
+  return normalizeAddress(request.headers.get("x-real-ip"));
 }
 
 export function consumeRateLimit(bucket: string, identity: string, options: RateLimitOptions) {
@@ -86,36 +85,34 @@ export function clearRateLimit(bucket: string, identity: string) {
   global.academiaRateLimits?.delete(`${bucket}:${identity}`);
 }
 
-function allowedOrigins(request: Request) {
-  const origins = new Set<string>();
-  try {
-    origins.add(new URL(request.url).origin);
-  } catch {
-    // A URL da Request é válida nas rotas do Next; a proteção permanece fechada se não for.
-  }
-
+function canonicalOrigin(request: Request) {
   const publicUrl = process.env.NEXT_PUBLIC_SITE_URL;
   if (publicUrl) {
     try {
-      origins.add(new URL(publicUrl).origin);
+      return new URL(publicUrl).origin;
     } catch {
-      // A validação de ambiente informará a URL pública inválida na inicialização.
+      return null;
     }
   }
 
-  const forwardedHost = request.headers.get("x-forwarded-host") || request.headers.get("host");
-  const forwardedProto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
-  if (forwardedHost && (forwardedProto === "http" || forwardedProto === "https")) {
-    origins.add(`${forwardedProto}://${forwardedHost.split(",")[0].trim()}`);
+  // O endereço da própria requisição é suficiente no desenvolvimento. Em
+  // produção, NEXT_PUBLIC_SITE_URL é obrigatório e validado na inicialização.
+  if (process.env.NODE_ENV !== "production") {
+    try {
+      return new URL(request.url).origin;
+    } catch {
+      return null;
+    }
   }
-  return origins;
+  return null;
 }
 
 export function isSameOriginMutation(request: Request) {
   const origin = request.headers.get("origin");
   if (!origin) return process.env.NODE_ENV !== "production";
   try {
-    return allowedOrigins(request).has(new URL(origin).origin);
+    const expectedOrigin = canonicalOrigin(request);
+    return Boolean(expectedOrigin && expectedOrigin === new URL(origin).origin);
   } catch {
     return false;
   }

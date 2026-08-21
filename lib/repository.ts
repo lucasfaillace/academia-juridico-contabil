@@ -166,6 +166,12 @@ function filterPreviewArticles(articles: Article[], query: string, tag: string) 
   });
 }
 
+function throwDatabaseReadError(scope: string, error: unknown): never {
+  console.error(`${scope}_unavailable`, error instanceof Error ? error.message : "unknown");
+  if (error instanceof Error) throw error;
+  throw new Error("Não foi possível consultar o banco de dados.");
+}
+
 function databaseFilters(query: string, tag: string) {
   const values: string[] = [];
   const clauses = ["a.status='published'"];
@@ -243,12 +249,7 @@ export async function getPublishedArticlePage(filters: PublishedArticleFilters =
       pageCount,
     };
   } catch (error) {
-    console.error("published_article_page_fallback", error instanceof Error ? error.message : "unknown");
-    const filtered = filterPreviewArticles(fallbackArticles, normalized.query, normalized.tag);
-    const pageCount = Math.max(1, Math.ceil(filtered.length / normalized.pageSize));
-    const page = Math.min(normalized.page, pageCount);
-    const start = (page - 1) * normalized.pageSize;
-    return { articles: filtered.slice(start, start + normalized.pageSize), total: filtered.length, page, pageSize: normalized.pageSize, pageCount };
+    return throwDatabaseReadError("published_article_page", error);
   }
 }
 
@@ -265,8 +266,7 @@ export async function getRecentPublishedArticles(limit = 3): Promise<Article[]> 
       LIMIT $1`, [normalizedLimit]);
     return result.rows.map(mapArticleSummary);
   } catch (error) {
-    console.error("recent_articles_fallback", error instanceof Error ? error.message : "unknown");
-    return fallbackArticles.slice(0, normalizedLimit);
+    return throwDatabaseReadError("recent_articles", error);
   }
 }
 
@@ -277,8 +277,7 @@ export async function getPublishedArticle(slug: string): Promise<Article | undef
     const result = await getPool().query(`${articleSelect} WHERE a.status='published' AND a.slug=$1 LIMIT 1`, [slug]);
     return result.rows[0] ? mapArticleRow(result.rows[0]) : undefined;
   } catch (error) {
-    console.error("published_article_fallback", error instanceof Error ? error.message : "unknown");
-    return fallbackArticles.find((article) => article.slug === slug);
+    return throwDatabaseReadError("published_article", error);
   }
 }
 

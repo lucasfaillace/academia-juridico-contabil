@@ -167,6 +167,8 @@ O Nginx aceita corpos de até **21 MiB**. A aplicação mantém o limite efetivo
 
 O arquivo também limita login, contato, comentários e registro de visualizações no proxy. A aplicação mantém uma segunda proteção para esses endpoints públicos. Esse limitador interno usa memória e é adequado ao serviço `app` único definido neste Compose; seus contadores são reiniciados junto com o processo. Antes de executar múltiplas réplicas, configure um limitador compartilhado em PostgreSQL/Redis ou no proxy. A Cloudflare pode acrescentar proteção, mas não é requisito para esses controles.
 
+O Nginx sobrescreve `Host`, `X-Real-IP`, `X-Forwarded-For`, `X-Forwarded-Host` e `X-Forwarded-Proto` antes de encaminhar cada requisição, além de remover `CF-Connecting-IP` do tráfego entregue à aplicação. A aplicação usa somente o `X-Real-IP` produzido pelo Nginx para limitação interna e compara mutações com a origem canônica de `NEXT_PUBLIC_SITE_URL`; portanto, não confie em uma configuração própria que apenas repasse esses cabeçalhos recebidos do visitante. A porta `3000` deve continuar acessível exclusivamente por `127.0.0.1`.
+
 Em produção, a aplicação envia uma Política de Segurança de Conteúdo efetiva. Scripts não podem usar `eval`, manipuladores JavaScript em atributos HTML são bloqueados e imagens ficam restritas ao próprio site e aos dados locais usados pelo editor. O carregamento externo permitido limita-se ao Google Analytics consentido e aos domínios de vídeo previstos. A diretiva `unsafe-inline` permanece somente para scripts e estilos inseridos pelo runtime do Next.js e por componentes que usam estilos calculados. Um nonce por requisição não foi adotado porque tornaria as páginas estáticas dinâmicas e eliminaria parte relevante do cache; essa decisão deve ser revista antes de introduzir scripts externos adicionais.
 
 Confirme que o contêiner responde apenas localmente:
@@ -280,7 +282,7 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-Atualize esse arquivo quando a Cloudflare alterar suas faixas oficiais. Não aceite `CF-Connecting-IP` de qualquer origem sem restringir `set_real_ip_from`. A referência é [Restoring original visitor IPs](https://developers.cloudflare.com/support/troubleshooting/restoring-visitor-ips/restoring-original-visitor-ips/).
+Atualize esse arquivo quando a Cloudflare alterar suas faixas oficiais. Não aceite `CF-Connecting-IP` de qualquer origem sem restringir `set_real_ip_from`. O módulo `real_ip` converte o endereço validado em `$remote_addr`; em seguida, a configuração do site grava esse valor em `X-Real-IP` e remove o cabeçalho original antes de encaminhar a requisição. A referência é [Restoring original visitor IPs](https://developers.cloudflare.com/support/troubleshooting/restoring-visitor-ips/restoring-original-visitor-ips/).
 
 Valide a política sem expor credenciais:
 

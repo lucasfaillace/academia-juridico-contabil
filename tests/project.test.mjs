@@ -94,6 +94,10 @@ test("limita todas as mutações públicas no aplicativo e no Nginx", async () =
   assert.match(login, /consumeRateLimit\("admin-login"/);
   assert.match(nginx, /zone=academia_comments/);
   assert.match(nginx, /zone=academia_views/);
+  assert.doesNotMatch(security, /request\.headers\.get\("(?:cf-connecting-ip|x-forwarded-for|x-forwarded-host|x-forwarded-proto)"\)/);
+  assert.equal((nginx.match(/proxy_set_header X-Real-IP \$remote_addr;/g) || []).length, 7);
+  assert.equal((nginx.match(/proxy_set_header X-Forwarded-Host \$host;/g) || []).length, 7);
+  assert.equal((nginx.match(/proxy_set_header CF-Connecting-IP "";/g) || []).length, 7);
   await assert.rejects(access(new URL("lib/rate-limit.ts", root)));
 });
 
@@ -208,6 +212,8 @@ test("inclui fórmulas, tags, pesquisa integral e sumário acadêmico", async ()
   assert.match(articleList, /role="search"/);
   assert.match(repository, /websearch_to_tsquery\('portuguese'/);
   assert.match(repository, /br\.reference_text ILIKE/);
+  assert.match(repository, /throwDatabaseReadError/);
+  assert.doesNotMatch(repository, /published_article_page_fallback|recent_articles_fallback|published_article_fallback/);
   assert.doesNotMatch(articleList, /category-filter/);
   assert.match(articlePage, /article-tags/);
   assert.match(styles, /tag-juridica/);

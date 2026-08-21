@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { isSameOriginMutation, requestAddress } from "../lib/request-security.ts";
 import { validateProductionEnvironment } from "../scripts/start-production.mjs";
 
 const requiredNames = [
@@ -62,4 +63,54 @@ test("rejeita segredos curtos e URL pública sem HTTPS", () => {
     { ...validEnvironment(), NEXT_PUBLIC_SITE_URL: "http://academia.example.invalid" },
     () => assert.throws(validateProductionEnvironment, /HTTPS/),
   );
+});
+
+test("aceita somente a origem pública canônica em mutações de produção", () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousPublicUrl = process.env.NEXT_PUBLIC_SITE_URL;
+  try {
+    process.env.NODE_ENV = "production";
+    process.env.NEXT_PUBLIC_SITE_URL = "https://academia.example.invalid";
+
+    const valid = new Request("http://127.0.0.1:3000/api/contact", {
+      method: "POST",
+      headers: { origin: "https://academia.example.invalid" },
+    });
+    assert.equal(isSameOriginMutation(valid), true);
+
+    const forged = new Request("http://127.0.0.1:3000/api/contact", {
+      method: "POST",
+      headers: {
+        origin: "https://forjada.example.invalid",
+        "x-forwarded-host": "forjada.example.invalid",
+        "x-forwarded-proto": "https",
+      },
+    });
+    assert.equal(isSameOriginMutation(forged), false);
+    assert.equal(isSameOriginMutation(new Request("http://127.0.0.1:3000/api/contact", { method: "POST" })), false);
+  } finally {
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+    if (previousPublicUrl === undefined) delete process.env.NEXT_PUBLIC_SITE_URL;
+    else process.env.NEXT_PUBLIC_SITE_URL = previousPublicUrl;
+  }
+});
+
+test("usa somente o endereço normalizado pelo proxy confiável", () => {
+  const request = new Request("http://127.0.0.1:3000/api/contact", {
+    headers: {
+      "x-real-ip": "198.51.100.7",
+      "x-forwarded-for": "203.0.113.50",
+      "cf-connecting-ip": "203.0.113.60",
+    },
+  });
+  assert.equal(requestAddress(request), "198.51.100.7");
+
+  const untrustedOnly = new Request("http://127.0.0.1:3000/api/contact", {
+    headers: {
+      "x-forwarded-for": "203.0.113.50",
+      "cf-connecting-ip": "203.0.113.60",
+    },
+  });
+  assert.equal(requestAddress(untrustedOnly), "unknown");
 });
