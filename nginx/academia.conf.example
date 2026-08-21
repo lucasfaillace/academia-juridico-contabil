@@ -1,6 +1,8 @@
 # Substitua academia.exemplo.br e www.academia.exemplo.br antes de instalar.
 limit_req_zone $binary_remote_addr zone=academia_contact:10m rate=10r/m;
 limit_req_zone $binary_remote_addr zone=academia_login:10m rate=10r/m;
+limit_req_zone $binary_remote_addr zone=academia_comments:10m rate=10r/m;
+limit_req_zone $binary_remote_addr zone=academia_views:10m rate=60r/m;
 
 server {
     listen 80;
@@ -33,6 +35,28 @@ server {
 
     location = /api/auth/login {
         limit_req zone=academia_login burst=5 nodelay;
+        proxy_pass http://127.0.0.1:3000;
+        include proxy_params;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_connect_timeout 10s;
+        proxy_read_timeout 60s;
+    }
+
+    location ~ ^/api/articles/[^/]+/comments$ {
+        limit_req zone=academia_comments burst=5 nodelay;
+        proxy_pass http://127.0.0.1:3000;
+        include proxy_params;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_connect_timeout 10s;
+        proxy_read_timeout 60s;
+    }
+
+    location ~ ^/api/articles/[^/]+/views$ {
+        limit_req zone=academia_views burst=20 nodelay;
         proxy_pass http://127.0.0.1:3000;
         include proxy_params;
         proxy_set_header Host $host;

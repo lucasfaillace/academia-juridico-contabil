@@ -72,6 +72,26 @@ test("inclui controles de segurança e portabilidade", async () => {
   assert.match(articleApi, /purgeOptionalCloudflareCache/);
 });
 
+test("limita todas as mutações públicas no aplicativo e no Nginx", async () => {
+  const [security, views, comments, contact, login, nginx] = await Promise.all([
+    readFile(new URL("lib/request-security.ts", root), "utf8"),
+    readFile(new URL("app/api/articles/[slug]/views/route.ts", root), "utf8"),
+    readFile(new URL("app/api/articles/[slug]/comments/route.ts", root), "utf8"),
+    readFile(new URL("app/api/contact/route.ts", root), "utf8"),
+    readFile(new URL("app/api/auth/login/route.ts", root), "utf8"),
+    readFile(new URL("nginx/academia.conf.example", root), "utf8"),
+  ]);
+  assert.match(security, /MAX_RATE_LIMIT_ENTRIES = 10_000/);
+  assert.match(security, /pruneRateLimits/);
+  assert.match(views, /consumeRateLimit\("article-view"/);
+  assert.match(comments, /consumeRateLimit\("article-comment"/);
+  assert.match(contact, /consumeRateLimit\("contact"/);
+  assert.match(login, /consumeRateLimit\("admin-login"/);
+  assert.match(nginx, /zone=academia_comments/);
+  assert.match(nginx, /zone=academia_views/);
+  await assert.rejects(access(new URL("lib/rate-limit.ts", root)));
+});
+
 test("mantém referências abreviadas vinculadas e contabilizadas", async () => {
   const [editor, segments, articleHtml, referenceLinks, exporter, styles] = await Promise.all([
     readFile(new URL("components/RichEditor.tsx", root), "utf8"),

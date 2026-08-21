@@ -50,7 +50,7 @@ jobs:
       AUTH_SECRET: ci-auth-secret-with-at-least-32-characters
       ANALYTICS_HASH_SECRET: ci-analytics-secret-with-at-least-32-characters
       ADMIN_EMAIL: admin-ci@example.invalid
-      ADMIN_PASSWORD_HASH: 'scrypt$16384$8$1$ci-salt$ci-derived-key'
+      ADMIN_PASSWORD_HASH: 'scrypt$16384$8$1$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
 
     steps:
       - name: Obter o código

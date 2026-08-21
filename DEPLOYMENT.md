@@ -165,6 +165,8 @@ sudo systemctl reload nginx
 
 O Nginx aceita corpos de até **21 MiB**. A aplicação mantém o limite efetivo do arquivo PDF em **20 MiB** e valida tanto o tipo declarado quanto a assinatura `%PDF-`; o 1 MiB adicional serve apenas para acomodar os metadados do formulário multipart. Assim, um PDF válido no limite anunciado não é recusado antecipadamente pelo proxy. O limite também permanece compatível com o proxy opcional da Cloudflare no plano gratuito.
 
+O arquivo também limita login, contato, comentários e registro de visualizações no proxy. A aplicação mantém uma segunda proteção para esses endpoints públicos. Esse limitador interno usa memória e é adequado ao serviço `app` único definido neste Compose; seus contadores são reiniciados junto com o processo. Antes de executar múltiplas réplicas, configure um limitador compartilhado em PostgreSQL/Redis ou no proxy. A Cloudflare pode acrescentar proteção, mas não é requisito para esses controles.
+
 Confirme que o contêiner responde apenas localmente:
 
 ```bash
@@ -429,6 +431,7 @@ curl -fsS http://127.0.0.1:3000/api/health
 - [ ] DNS A/AAAA aponta para a VPS correta.
 - [ ] `.env` tem permissão `600` e não está no Git.
 - [ ] Senhas do PostgreSQL, administrador, SMTP, `AUTH_SECRET` e `ANALYTICS_HASH_SECRET` são exclusivas.
+- [ ] A inicialização rejeita configuração inválida (`docker compose run --rm --no-deps app node scripts/start-production.mjs --validate-only`).
 - [ ] `docker compose ps` mostra `db` e `app` saudáveis.
 - [ ] Migrações aparecem como aplicadas.
 - [ ] Nginx passa em `sudo nginx -t`.

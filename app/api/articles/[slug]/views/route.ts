@@ -6,7 +6,7 @@ import { getPool, hasDatabaseConfig } from "@/lib/db";
 import { listStoredArticles, usesFileContentFallback } from "@/lib/preview-store";
 import { viewDateInBahia } from "@/lib/statistics";
 import { savePreviewView } from "@/lib/statistics-store";
-import { crossOriginMutationResponse } from "@/lib/request-security";
+import { consumeRateLimit, crossOriginMutationResponse, requestAddress } from "@/lib/request-security";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,6 +28,13 @@ function dedupeKey(slug: string, visitorId: string) {
 export async function POST(request: Request, { params }: { params: Promise<{ slug: string }> }) {
   const originError = crossOriginMutationResponse(request);
   if (originError) return originError;
+  const rate = consumeRateLimit("article-view", requestAddress(request), { limit: 60, windowMs: 60_000 });
+  if (!rate.allowed) {
+    return NextResponse.json(
+      { counted: false, reason: "rate-limit" },
+      { status: 429, headers: { "retry-after": String(rate.retryAfter) } },
+    );
+  }
   const { slug } = await params;
   if (!validSlug(slug)) return NextResponse.json({ counted: false }, { status: 400 });
   if (request.headers.get("x-analytics-consent") !== "granted") {

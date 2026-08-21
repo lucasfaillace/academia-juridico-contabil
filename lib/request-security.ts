@@ -2,6 +2,7 @@ type RateLimitEntry = {
   count: number;
   resetAt: number;
   blockedUntil: number;
+  lastSeenAt: number;
 };
 
 type RateLimitOptions = {
@@ -12,6 +13,23 @@ type RateLimitOptions = {
 
 declare global {
   var academiaRateLimits: Map<string, RateLimitEntry> | undefined;
+  var academiaRateLimitLastPruneAt: number | undefined;
+}
+
+const MAX_RATE_LIMIT_ENTRIES = 10_000;
+const RATE_LIMIT_PRUNE_THRESHOLD = 2_000;
+const RATE_LIMIT_PRUNE_INTERVAL_MS = 60_000;
+
+function pruneRateLimits(rates: Map<string, RateLimitEntry>, now: number) {
+  for (const [key, entry] of rates) {
+    if (entry.resetAt <= now && entry.blockedUntil <= now) rates.delete(key);
+  }
+  if (rates.size < MAX_RATE_LIMIT_ENTRIES) return;
+
+  const oldest = [...rates.entries()]
+    .sort((left, right) => left[1].lastSeenAt - right[1].lastSeenAt)
+    .slice(0, Math.max(1, rates.size - MAX_RATE_LIMIT_ENTRIES + 1));
+  for (const [key] of oldest) rates.delete(key);
 }
 
 function normalizeAddress(value: string | null) {
@@ -32,22 +50,27 @@ export function consumeRateLimit(bucket: string, identity: string, options: Rate
   const rates = global.academiaRateLimits || new Map<string, RateLimitEntry>();
   global.academiaRateLimits = rates;
 
-  if (rates.size > 2_000) {
-    for (const [key, entry] of rates) {
-      if (entry.resetAt <= now && entry.blockedUntil <= now) rates.delete(key);
-    }
+  const lastPruneAt = global.academiaRateLimitLastPruneAt || 0;
+  if (
+    rates.size >= MAX_RATE_LIMIT_ENTRIES
+    || (rates.size >= RATE_LIMIT_PRUNE_THRESHOLD && now - lastPruneAt >= RATE_LIMIT_PRUNE_INTERVAL_MS)
+  ) {
+    pruneRateLimits(rates, now);
+    global.academiaRateLimitLastPruneAt = now;
   }
 
   const key = `${bucket}:${identity}`;
   const current = rates.get(key);
   if (current?.blockedUntil && current.blockedUntil > now) {
+    current.lastSeenAt = now;
     return { allowed: false, retryAfter: Math.max(1, Math.ceil((current.blockedUntil - now) / 1000)) };
   }
 
   const entry = !current || current.resetAt <= now
-    ? { count: 0, resetAt: now + options.windowMs, blockedUntil: 0 }
+    ? { count: 0, resetAt: now + options.windowMs, blockedUntil: 0, lastSeenAt: now }
     : current;
   entry.count += 1;
+  entry.lastSeenAt = now;
 
   if (entry.count > options.limit) {
     entry.blockedUntil = now + (options.blockMs || options.windowMs);
