@@ -12,7 +12,7 @@ type AdminArticle = {
   title: string;
   slug: string;
   summary: string;
-  content_html: string;
+  content_html?: string;
   youtube_url?: string;
   author_name?: string;
   author_names?: string[];
@@ -131,11 +131,14 @@ export function AdminDashboard({
   const [tab, setTab] = useState("dashboard");
   const [articles, setArticles] = useState<AdminArticle[]>([]);
   const [loadingArticles, setLoadingArticles] = useState(true);
+  const [articlePage, setArticlePage] = useState(1);
+  const [articlePageCount, setArticlePageCount] = useState(1);
+  const [articleTotal, setArticleTotal] = useState(0);
+  const [articleTotals, setArticleTotals] = useState({ all: 0, published: 0 });
   const [articleQuery, setArticleQuery] = useState("");
   const [articleStatusFilter, setArticleStatusFilter] = useState<"all" | AdminArticle["status"]>("all");
   const [articleTagFilter, setArticleTagFilter] = useState("all");
   const [articleUpdatedFilter, setArticleUpdatedFilter] = useState("all");
-  const [articleUpdatedAfter, setArticleUpdatedAfter] = useState<number>();
   const [html, setHtml] = useState(emptyContent);
   const [title, setTitle] = useState("");
   const [summary, setSummary] = useState("");
@@ -209,18 +212,38 @@ export function AdminDashboard({
   const [analyticsMeasurementId, setAnalyticsMeasurementId] = useState("");
   const [analyticsStatus, setAnalyticsStatus] = useState("");
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const articleRequestController = useRef<AbortController | null>(null);
 
   const loadArticles = useCallback(async () => {
+    articleRequestController.current?.abort();
+    const controller = new AbortController();
+    articleRequestController.current = controller;
     setLoadingArticles(true);
-    const response = await fetch("/api/articles");
-    const data = await response.json();
-    setLoadingArticles(false);
-    if (!response.ok) {
-      setNotice(data.error || "Não foi possível carregar os artigos.");
-      return;
+    const parameters = new URLSearchParams({ page: String(articlePage), pageSize: "25" });
+    if (articleQuery.trim()) parameters.set("q", articleQuery.trim());
+    if (articleStatusFilter !== "all") parameters.set("status", articleStatusFilter);
+    if (articleTagFilter !== "all") parameters.set("tag", articleTagFilter);
+    if (articleUpdatedFilter !== "all") parameters.set("updatedDays", articleUpdatedFilter);
+    try {
+      const response = await fetch(`/api/articles?${parameters}`, { signal: controller.signal, cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) {
+        setNotice(data.error || "Não foi possível carregar os artigos.");
+        return;
+      }
+      setArticles(data.articles);
+      setArticleTotal(data.total);
+      setArticlePage(data.page);
+      setArticlePageCount(data.pageCount);
+      setArticleTotals(data.totals);
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError")) {
+        setNotice("Não foi possível carregar os artigos.");
+      }
+    } finally {
+      if (articleRequestController.current === controller) setLoadingArticles(false);
     }
-    setArticles(data);
-  }, []);
+  }, [articlePage, articleQuery, articleStatusFilter, articleTagFilter, articleUpdatedFilter]);
 
   const loadTags = useCallback(async () => {
     const response = await fetch("/api/tags");
@@ -338,49 +361,58 @@ export function AdminDashboard({
       : "Google Analytics 4 desativado.");
   }
 
+  const openArticleEditor = useCallback((article: AdminArticle, footnoteId?: string) => {
+    const footnoteHash = footnoteId ? `#editor-footnote-${encodeURIComponent(footnoteId)}` : "";
+    window.history.replaceState(null, "", `/admin?edit=${encodeURIComponent(article.slug)}${footnoteHash}`);
+    const articleAuthors = article.author_names?.length ? article.author_names : [article.author_name || defaultAuthorName];
+    const articleTags = (article.tags || []).map((tag) => tag.slug);
+    const content = article.content_html || emptyContent;
+    setTitle(article.title);
+    setSummary(article.summary || "");
+    setYoutubeUrl(article.youtube_url || "");
+    setCategory(article.category === "Sem categoria" ? "" : article.category);
+    setAuthors(articleAuthors);
+    setSelectedTagSlugs(articleTags);
+    setTagPickerOpen(false);
+    setTagQuery("");
+    setOriginalSlug(article.slug);
+    setEditingStatus(article.status);
+    setHtml(content);
+    setLastSavedDraft(articleDraftFingerprint({
+      title: article.title,
+      summary: article.summary || "",
+      youtubeUrl: article.youtube_url || "",
+      category: article.category === "Sem categoria" ? "" : article.category,
+      authors: articleAuthors,
+      tagSlugs: articleTags,
+      content,
+    }));
+    setAutosaveStatus(article.status === "draft" ? "saved" : "idle");
+    setFocusedFootnote(footnoteId ? { id: footnoteId, requestId: crypto.randomUUID() } : undefined);
+    setNotice("");
+    setTab("editor");
+  }, [defaultAuthorName]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void loadArticles(); }, 300);
+    return () => window.clearTimeout(timer);
+  }, [loadArticles]);
+
   useEffect(() => {
     let active = true;
-    void fetch("/api/articles")
-      .then(async (response) => ({ response, data: await response.json() }))
-      .then(({ response, data }) => {
-        if (!active) return;
-        setLoadingArticles(false);
-        if (!response.ok) {
-          setNotice(data.error || "Não foi possível carregar os artigos.");
-          return;
-        }
-        setArticles(data);
-        if (!initialArticleSlug) return;
-        const article = (data as AdminArticle[]).find((item) => item.slug === initialArticleSlug);
-        if (!article) {
-          setNotice("O artigo solicitado não foi encontrado.");
-          setTab("articles");
-          return;
-        }
-        setTitle(article.title);
-        setSummary(article.summary || "");
-        setYoutubeUrl(article.youtube_url || "");
-        setCategory(article.category === "Sem categoria" ? "" : article.category);
-        setAuthors(article.author_names?.length ? article.author_names : [article.author_name || defaultAuthorName]);
-        setSelectedTagSlugs((article.tags || []).map((tag) => tag.slug));
-        setTagPickerOpen(false);
-        setTagQuery("");
-        setOriginalSlug(article.slug);
-        setEditingStatus(article.status);
-        setHtml(article.content_html || emptyContent);
-        setLastSavedDraft(articleDraftFingerprint({
-          title: article.title,
-          summary: article.summary || "",
-          youtubeUrl: article.youtube_url || "",
-          category: article.category === "Sem categoria" ? "" : article.category,
-          authors: article.author_names?.length ? article.author_names : [article.author_name || defaultAuthorName],
-          tagSlugs: (article.tags || []).map((tag) => tag.slug),
-          content: article.content_html || emptyContent,
-        }));
-        setAutosaveStatus(article.status === "draft" ? "saved" : "idle");
-        setNotice("");
-        setTab("editor");
-      });
+    if (initialArticleSlug) {
+      void fetch(`/api/articles?slug=${encodeURIComponent(initialArticleSlug)}`, { cache: "no-store" })
+        .then(async (response) => ({ response, data: await response.json() }))
+        .then(({ response, data }) => {
+          if (!active) return;
+          if (!response.ok) {
+            setNotice(data.error || "O artigo solicitado não foi encontrado.");
+            setTab("articles");
+            return;
+          }
+          openArticleEditor(data as AdminArticle);
+        });
+    }
     void fetch("/api/tags")
       .then(async (response) => ({ response, data: await response.json() }))
       .then(({ response, data }) => {
@@ -403,7 +435,7 @@ export function AdminDashboard({
         else setNotice(data.error || "Não foi possível carregar as referências.");
       });
     return () => { active = false; };
-  }, [defaultAuthorName, initialArticleSlug]);
+  }, [initialArticleSlug, openArticleEditor]);
 
   function newArticle() {
     window.history.replaceState(null, "", "/admin");
@@ -432,33 +464,15 @@ export function AdminDashboard({
     setTab("editor");
   }
 
-  function editArticle(article: AdminArticle, footnoteId?: string) {
-    const footnoteHash = footnoteId ? `#editor-footnote-${encodeURIComponent(footnoteId)}` : "";
-    window.history.replaceState(null, "", `/admin?edit=${encodeURIComponent(article.slug)}${footnoteHash}`);
-    setTitle(article.title);
-    setSummary(article.summary || "");
-    setYoutubeUrl(article.youtube_url || "");
-    setCategory(article.category === "Sem categoria" ? "" : article.category);
-    setAuthors(article.author_names?.length ? article.author_names : [article.author_name || defaultAuthorName]);
-    setSelectedTagSlugs((article.tags || []).map((tag) => tag.slug));
-    setTagPickerOpen(false);
-    setTagQuery("");
-    setOriginalSlug(article.slug);
-    setEditingStatus(article.status);
-    setHtml(article.content_html || emptyContent);
-    setLastSavedDraft(articleDraftFingerprint({
-      title: article.title,
-      summary: article.summary || "",
-      youtubeUrl: article.youtube_url || "",
-      category: article.category === "Sem categoria" ? "" : article.category,
-      authors: article.author_names?.length ? article.author_names : [article.author_name || defaultAuthorName],
-      tagSlugs: (article.tags || []).map((tag) => tag.slug),
-      content: article.content_html || emptyContent,
-    }));
-    setAutosaveStatus(article.status === "draft" ? "saved" : "idle");
-    setFocusedFootnote(footnoteId ? { id: footnoteId, requestId: crypto.randomUUID() } : undefined);
+  async function editArticle(article: AdminArticle, footnoteId?: string) {
     setNotice("");
-    setTab("editor");
+    const response = await fetch(`/api/articles?slug=${encodeURIComponent(article.slug)}`, { cache: "no-store" });
+    const data = await response.json();
+    if (!response.ok) {
+      setNotice(data.error || "Não foi possível abrir o artigo.");
+      return;
+    }
+    openArticleEditor(data as AdminArticle, footnoteId);
   }
 
   const save = useCallback(async (
@@ -466,6 +480,8 @@ export function AdminDashboard({
     options: { automatic?: boolean } = {},
   ) => {
     const automatic = options.automatic === true;
+    const previousSlug = originalSlug;
+    const previousStatus = editingStatus;
     const draftFingerprint = articleDraftFingerprint({
       title,
       summary,
@@ -503,13 +519,45 @@ export function AdminDashboard({
       setOriginalSlug(data.slug);
       setEditingStatus(status);
       setLastSavedDraft(draftFingerprint);
+      const updatedAt = new Date().toISOString();
+      const selectedTags = selectedTagSlugs
+        .map((slug) => tags.find((tag) => tag.slug === slug))
+        .filter((tag): tag is AdminTag => Boolean(tag));
+      const savedSummary: AdminArticle = {
+        id: data.id,
+        title: title.trim(),
+        slug: data.slug,
+        summary,
+        youtube_url: youtubeUrl,
+        category: category || "Sem categoria",
+        author_name: authors.map((name) => name.trim()).filter(Boolean)[0],
+        author_names: authors.map((name) => name.trim()).filter(Boolean),
+        tags: selectedTags,
+        status,
+        updated_at: updatedAt,
+      };
+      setArticles((current) => {
+        const withoutPrevious = current.filter((article) => article.slug !== (previousSlug || data.slug));
+        return [savedSummary, ...withoutPrevious].slice(0, 25);
+      });
+      if (!previousSlug) {
+        setArticleTotal((current) => current + 1);
+        setArticleTotals((current) => ({
+          all: current.all + 1,
+          published: current.published + (status === "published" ? 1 : 0),
+        }));
+      } else if (previousStatus !== status) {
+        setArticleTotals((current) => ({
+          ...current,
+          published: Math.max(0, current.published + (status === "published" ? 1 : -1)),
+        }));
+      }
       window.history.replaceState(null, "", `/admin?edit=${encodeURIComponent(data.slug)}`);
       if (automatic) setAutosaveStatus("saved");
       else {
         setAutosaveStatus(status === "draft" ? "saved" : "idle");
         setNotice(status === "draft" ? "Rascunho salvo." : "Artigo publicado.");
       }
-      await Promise.all([loadArticles(), loadTags()]);
       return true;
     } catch {
       if (automatic) setAutosaveStatus("error");
@@ -521,12 +569,12 @@ export function AdminDashboard({
   }, [
     authors,
     category,
+    editingStatus,
     html,
-    loadArticles,
-    loadTags,
     originalSlug,
     selectedTagSlugs,
     summary,
+    tags,
     title,
     youtubeUrl,
   ]);
@@ -1138,17 +1186,7 @@ export function AdminDashboard({
     ["settings", "Configurações", Settings],
   ] as const;
 
-  const normalizedArticleQuery = normalizeAdminSearch(articleQuery);
-  const filteredArticles = articles.filter((article) => {
-    const authorsText = [article.author_name || "", ...(article.author_names || [])].join(" ");
-    const matchesQuery = !normalizedArticleQuery
-      || normalizeAdminSearch(`${article.title} ${authorsText}`).includes(normalizedArticleQuery);
-    const matchesStatus = articleStatusFilter === "all" || article.status === articleStatusFilter;
-    const matchesTag = articleTagFilter === "all" || article.tags?.some((tag) => tag.slug === articleTagFilter);
-    const updatedAt = Date.parse(article.updated_at);
-    const matchesUpdatedAt = !articleUpdatedAfter || Number.isNaN(updatedAt) || updatedAt >= articleUpdatedAfter;
-    return matchesQuery && matchesStatus && matchesTag && matchesUpdatedAt;
-  });
+  const filteredArticles = articles;
   const normalizedReferenceQuery = normalizeAdminSearch(referenceQuery);
   const normalizedFichamentoQuery = normalizeAdminSearch(referenceFichamentoQuery);
   const filteredReferences = references.filter((reference) => {
@@ -1208,12 +1246,12 @@ export function AdminDashboard({
     setArticleStatusFilter("all");
     setArticleTagFilter("all");
     setArticleUpdatedFilter("all");
-    setArticleUpdatedAfter(undefined);
+    setArticlePage(1);
   }
 
   function setArticleUpdatedPeriod(value: string) {
     setArticleUpdatedFilter(value);
-    setArticleUpdatedAfter(value === "all" ? undefined : new Date().valueOf() - Number(value) * 24 * 60 * 60 * 1000);
+    setArticlePage(1);
   }
 
   return (
@@ -1230,8 +1268,10 @@ export function AdminDashboard({
                 else {
                   window.history.replaceState(null, "", "/admin");
                   setTab(id);
+                  if (id === "articles") void loadArticles();
                   if (id === "comments") void loadComments();
                   if (id === "publications") void loadPublications();
+                  if (id === "taxonomy") void loadTags();
                   if (id === "references") {
                     void loadReferences();
                     void loadFichamentoTopics();
@@ -1260,11 +1300,11 @@ export function AdminDashboard({
             {notice && <p className="admin-notice" aria-live="polite">{notice}</p>}
             <div className="admin-summary">
               <section>
-                <span>{articles.length}</span>
+                <span>{articleTotals.all}</span>
                 <div><h2>Artigos</h2><p>Publicados e rascunhos cadastrados.</p></div>
               </section>
               <section>
-                <span>{articles.filter((article) => article.status === "published").length}</span>
+                <span>{articleTotals.published}</span>
                 <div><h2>Publicados</h2><p>Disponíveis no blog.</p></div>
               </section>
             </div>
@@ -1297,13 +1337,13 @@ export function AdminDashboard({
                 <input
                   type="search"
                   value={articleQuery}
-                  onChange={(event) => setArticleQuery(event.target.value)}
+                  onChange={(event) => { setArticleQuery(event.target.value); setArticlePage(1); }}
                   placeholder="Pesquisar por título ou autoria"
                 />
               </label>
               <label>
                 <span>Status</span>
-                <select value={articleStatusFilter} onChange={(event) => setArticleStatusFilter(event.target.value as "all" | AdminArticle["status"])}>
+                <select value={articleStatusFilter} onChange={(event) => { setArticleStatusFilter(event.target.value as "all" | AdminArticle["status"]); setArticlePage(1); }}>
                   <option value="all">Todos</option>
                   <option value="published">Publicados</option>
                   <option value="draft">Rascunhos</option>
@@ -1311,7 +1351,7 @@ export function AdminDashboard({
               </label>
               <label>
                 <span>Tag</span>
-                <select value={articleTagFilter} onChange={(event) => setArticleTagFilter(event.target.value)}>
+                <select value={articleTagFilter} onChange={(event) => { setArticleTagFilter(event.target.value); setArticlePage(1); }}>
                   <option value="all">Todas</option>
                   {tags.map((tag) => <option key={tag.id} value={tag.slug}>{tag.name}</option>)}
                 </select>
@@ -1330,9 +1370,9 @@ export function AdminDashboard({
               </button>
             </section>
             <p className="article-filter-result" aria-live="polite">
-              {filteredArticles.length === articles.length && !hasArticleFilters
-                ? `${articles.length} ${articles.length === 1 ? "artigo cadastrado" : "artigos cadastrados"}.`
-                : `${filteredArticles.length} ${filteredArticles.length === 1 ? "artigo encontrado" : "artigos encontrados"}.`}
+              {hasArticleFilters
+                ? `${articleTotal} ${articleTotal === 1 ? "artigo encontrado" : "artigos encontrados"}.`
+                : `${articleTotal} ${articleTotal === 1 ? "artigo cadastrado" : "artigos cadastrados"}.`}
             </p>
             <div className="admin-table-wrap">
               <table className="admin-table articles-admin-table">
@@ -1380,6 +1420,17 @@ export function AdminDashboard({
                 </tbody>
               </table>
             </div>
+            {articlePageCount > 1 && (
+              <nav className="admin-pagination" aria-label="Paginação dos artigos">
+                <button className="button secondary" type="button" disabled={articlePage <= 1 || loadingArticles} onClick={() => setArticlePage((page) => Math.max(1, page - 1))}>
+                  Anterior
+                </button>
+                <span>Página {articlePage} de {articlePageCount}</span>
+                <button className="button secondary" type="button" disabled={articlePage >= articlePageCount || loadingArticles} onClick={() => setArticlePage((page) => Math.min(articlePageCount, page + 1))}>
+                  Próxima
+                </button>
+              </nav>
+            )}
           </>
         )}
 

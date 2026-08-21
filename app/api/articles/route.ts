@@ -124,18 +124,133 @@ async function syncFootnoteReferences(client: PoolClient, articleId: string, con
   }
 }
 
-export async function GET() {
+function adminListParameters(request: Request) {
+  const search = new URL(request.url).searchParams;
+  const page = Math.max(1, Number.parseInt(search.get("page") || "1", 10) || 1);
+  const pageSize = Math.min(50, Math.max(1, Number.parseInt(search.get("pageSize") || "25", 10) || 25));
+  const status = search.get("status");
+  const updatedDays = Math.min(3650, Math.max(0, Number.parseInt(search.get("updatedDays") || "0", 10) || 0));
+  return {
+    slug: (search.get("slug") || "").trim().slice(0, 260),
+    query: (search.get("q") || "").trim().slice(0, 160),
+    tag: (search.get("tag") || "").trim().slice(0, 140),
+    status: status === "draft" || status === "published" ? status : "",
+    updatedDays,
+    page,
+    pageSize,
+  };
+}
+
+function previewArticleSummary(article: Awaited<ReturnType<typeof listStoredArticles>>[number]) {
+  return {
+    title: article.title,
+    slug: article.slug,
+    summary: article.summary,
+    youtube_url: article.youtube_url,
+    tags: article.tags,
+    category: article.category,
+    status: article.status,
+    author_name: article.author_name,
+    author_names: article.author_names,
+    published_at: article.published_at,
+    updated_at: article.updated_at,
+  };
+}
+
+export async function GET(request: Request) {
   if (!(await authenticated((await cookies()).get("academia_session")?.value))) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   }
 
+  const filters = adminListParameters(request);
+
   if (!hasDatabaseConfig() && usesFileContentFallback()) {
-    return NextResponse.json(await listStoredArticles());
+    const stored = await listStoredArticles();
+    if (filters.slug) {
+      const article = stored.find((item) => item.slug === filters.slug);
+      return article
+        ? NextResponse.json(article)
+        : NextResponse.json({ error: "Artigo não encontrado" }, { status: 404 });
+    }
+    const normalizedQuery = filters.query.toLocaleLowerCase("pt-BR");
+    const cutoff = filters.updatedDays ? Date.now() - filters.updatedDays * 86_400_000 : 0;
+    const filtered = stored.filter((article) => {
+      const authors = [article.author_name, ...(article.author_names || [])].join(" ");
+      return (!filters.status || article.status === filters.status)
+        && (!filters.tag || article.tags.some((tag) => tag.slug === filters.tag))
+        && (!cutoff || Date.parse(article.updated_at) >= cutoff)
+        && (!normalizedQuery || `${article.title} ${authors}`.toLocaleLowerCase("pt-BR").includes(normalizedQuery));
+    });
+    const pageCount = Math.max(1, Math.ceil(filtered.length / filters.pageSize));
+    const page = Math.min(filters.page, pageCount);
+    const start = (page - 1) * filters.pageSize;
+    return NextResponse.json({
+      articles: filtered.slice(start, start + filters.pageSize).map(previewArticleSummary),
+      total: filtered.length,
+      page,
+      pageSize: filters.pageSize,
+      pageCount,
+      totals: {
+        all: stored.length,
+        published: stored.filter((article) => article.status === "published").length,
+      },
+    });
   }
 
   try {
+    if (filters.slug) {
+      const result = await getPool().query(`
+        SELECT a.id, a.title, a.slug, a.summary, a.content_html, a.youtube_url, a.status, a.author_name, a.author_names, a.updated_at,
+             COALESCE(c.name, 'Sem categoria') AS category,
+             COALESCE(jsonb_agg(jsonb_build_object('id',t.id,'name',t.name,'slug',t.slug,'kind',t.kind) ORDER BY at.display_order, t.name)
+               FILTER (WHERE t.name IS NOT NULL),'[]'::jsonb) AS tags
+        FROM articles a
+        LEFT JOIN categories c ON c.id = a.category_id
+        LEFT JOIN article_tags at ON at.article_id=a.id
+        LEFT JOIN tags t ON t.id=at.tag_id
+        WHERE a.slug=$1
+        GROUP BY a.id,c.name
+        LIMIT 1`, [filters.slug]);
+      return result.rows[0]
+        ? NextResponse.json(result.rows[0])
+        : NextResponse.json({ error: "Artigo não encontrado" }, { status: 404 });
+    }
+
+    const values: Array<string | number> = [];
+    const clauses = ["TRUE"];
+    if (filters.query) {
+      values.push(`%${filters.query}%`);
+      const parameter = `$${values.length}`;
+      clauses.push(`(a.title ILIKE ${parameter} OR a.author_name ILIKE ${parameter} OR a.author_names::text ILIKE ${parameter})`);
+    }
+    if (filters.status) {
+      values.push(filters.status);
+      clauses.push(`a.status=$${values.length}`);
+    }
+    if (filters.tag) {
+      values.push(filters.tag);
+      clauses.push(`EXISTS (
+        SELECT 1 FROM article_tags filtered_at
+        JOIN tags filtered_tag ON filtered_tag.id=filtered_at.tag_id
+        WHERE filtered_at.article_id=a.id AND filtered_tag.slug=$${values.length}
+      )`);
+    }
+    if (filters.updatedDays) {
+      values.push(filters.updatedDays);
+      clauses.push(`a.updated_at >= NOW() - ($${values.length}::int * INTERVAL '1 day')`);
+    }
+    const where = clauses.join(" AND ");
+    const [countResult, totalsResult] = await Promise.all([
+      getPool().query(`SELECT COUNT(*)::int AS total FROM articles a WHERE ${where}`, values),
+      getPool().query(`SELECT COUNT(*)::int AS all,
+        COUNT(*) FILTER (WHERE status='published')::int AS published FROM articles`),
+    ]);
+    const total = Number(countResult.rows[0]?.total || 0);
+    const pageCount = Math.max(1, Math.ceil(total / filters.pageSize));
+    const page = Math.min(filters.page, pageCount);
+    const listValues = [...values, filters.pageSize, (page - 1) * filters.pageSize];
     const result = await getPool().query(`
-      SELECT a.id, a.title, a.slug, a.summary, a.content_html, a.youtube_url, a.status, a.author_name, a.author_names, a.updated_at,
+      SELECT a.id, a.title, a.slug, a.summary, a.youtube_url, a.status, a.author_name, a.author_names, a.updated_at,
              COALESCE(c.name, 'Sem categoria') AS category,
              COALESCE(jsonb_agg(jsonb_build_object('id',t.id,'name',t.name,'slug',t.slug,'kind',t.kind) ORDER BY at.display_order, t.name)
                FILTER (WHERE t.name IS NOT NULL),'[]'::jsonb) AS tags
@@ -143,10 +258,22 @@ export async function GET() {
       LEFT JOIN categories c ON c.id = a.category_id
       LEFT JOIN article_tags at ON at.article_id=a.id
       LEFT JOIN tags t ON t.id=at.tag_id
+      WHERE ${where}
       GROUP BY a.id,c.name
       ORDER BY a.updated_at DESC
-    `);
-    return NextResponse.json(result.rows);
+      LIMIT $${values.length + 1} OFFSET $${values.length + 2}
+    `, listValues);
+    return NextResponse.json({
+      articles: result.rows,
+      total,
+      page,
+      pageSize: filters.pageSize,
+      pageCount,
+      totals: {
+        all: Number(totalsResult.rows[0]?.all || 0),
+        published: Number(totalsResult.rows[0]?.published || 0),
+      },
+    });
   } catch {
     return NextResponse.json({ error: "Banco de dados indisponível" }, { status: 503 });
   }

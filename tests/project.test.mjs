@@ -206,7 +206,7 @@ test("inclui fórmulas, tags, pesquisa integral e sumário acadêmico", async ()
   assert.match(articleHtml, /Vídeo explicativo/);
   assert.match(articleHtml, /Comentários/);
   assert.match(articleList, /role="search"/);
-  assert.match(repository, /a\.content_html ILIKE/);
+  assert.match(repository, /websearch_to_tsquery\('portuguese'/);
   assert.match(repository, /br\.reference_text ILIKE/);
   assert.doesNotMatch(articleList, /category-filter/);
   assert.match(articlePage, /article-tags/);
@@ -1011,16 +1011,19 @@ test("remove uploads obsoletos somente após desvinculação e oferece reconcili
 });
 
 test("pagina e pesquisa o Blog no servidor sem carregar todos os artigos", async () => {
-  const [repository, blogPage, articleList, home] = await Promise.all([
+  const [repository, blogPage, articleList, home, migration] = await Promise.all([
     readFile(new URL("lib/repository.ts", root), "utf8"),
     readFile(new URL("app/blog/page.tsx", root), "utf8"),
     readFile(new URL("components/ArticleList.tsx", root), "utf8"),
     readFile(new URL("app/page.tsx", root), "utf8"),
+    readFile(new URL("migrations/001_initial.sql", root), "utf8"),
   ]);
   assert.match(repository, /getPublishedArticlePage/);
   assert.match(repository, /LIMIT \$\$\{values\.length \+ 1\} OFFSET \$\$\{values\.length \+ 2\}/);
   assert.match(repository, /br\.reference_text ILIKE/);
-  assert.match(repository, /a\.content_html ILIKE/);
+  assert.match(repository, /to_tsvector\('portuguese'[\s\S]*@@ websearch_to_tsquery\('portuguese'/);
+  assert.match(repository, /SELECT text_article\.id[\s\S]*UNION[\s\S]*SELECT author_article\.id/);
+  assert.match(migration, /articles_search_idx[\s\S]*to_tsvector\('portuguese'/);
   assert.match(repository, /a\.slug=\$1 LIMIT 1/);
   assert.doesNotMatch(repository, /getPublishedArticle\(slug: string\)[\s\S]{0,160}getPublishedArticles/);
   assert.match(blogPage, /pageSize: 12/);
@@ -1028,6 +1031,23 @@ test("pagina e pesquisa o Blog no servidor sem carregar todos os artigos", async
   assert.match(articleList, /rel="prev"/);
   assert.match(articleList, /rel="next"/);
   assert.match(home, /getRecentPublishedArticles\(3\)/);
+});
+
+test("pagina resumos administrativos, carrega conteúdo sob demanda e não recarrega tudo no autosave", async () => {
+  const [route, dashboard] = await Promise.all([
+    readFile(new URL("app/api/articles/route.ts", root), "utf8"),
+    readFile(new URL("components/AdminDashboard.tsx", root), "utf8"),
+  ]);
+  assert.match(route, /pageSize.*25/);
+  assert.match(route, /LIMIT \$\$\{values\.length \+ 1\} OFFSET \$\$\{values\.length \+ 2\}/);
+  assert.match(route, /if \(filters\.slug\)/);
+  assert.match(route, /SELECT a\.id, a\.title, a\.slug, a\.summary, a\.youtube_url/);
+  assert.equal((route.match(/SELECT a\.id, a\.title, a\.slug, a\.summary, a\.content_html/g) || []).length, 1);
+  assert.match(dashboard, /\/api\/articles\?slug=/);
+  assert.match(dashboard, /articleRequestController\.current\?\.abort/);
+  assert.match(dashboard, /setArticles\(\(current\) =>/);
+  assert.doesNotMatch(dashboard, /if \(automatic\)[\s\S]{0,900}loadArticles\(\)/);
+  assert.match(dashboard, /admin-pagination/);
 });
 
 test("endurece o Nginx e documenta a Cloudflare gratuita como opcional", async () => {

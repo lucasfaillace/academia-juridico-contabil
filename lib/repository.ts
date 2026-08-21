@@ -170,24 +170,30 @@ function databaseFilters(query: string, tag: string) {
   const values: string[] = [];
   const clauses = ["a.status='published'"];
   if (query) {
+    values.push(query);
+    const fullTextParameter = `$${values.length}`;
     values.push(`%${query}%`);
-    const parameter = `$${values.length}`;
-    clauses.push(`(
-      a.title ILIKE ${parameter}
-      OR a.summary ILIKE ${parameter}
-      OR a.content_html ILIKE ${parameter}
-      OR a.author_name ILIKE ${parameter}
-      OR a.author_names::text ILIKE ${parameter}
-      OR EXISTS (
-        SELECT 1 FROM article_tags searched_at
-        JOIN tags searched_tag ON searched_tag.id=searched_at.tag_id
-        WHERE searched_at.article_id=a.id AND searched_tag.name ILIKE ${parameter}
-      )
-      OR EXISTS (
-        SELECT 1 FROM article_footnote_references afr
-        JOIN bibliographic_references br ON br.id=afr.reference_id
-        WHERE afr.article_id=a.id AND br.reference_text ILIKE ${parameter}
-      )
+    const metadataParameter = `$${values.length}`;
+    clauses.push(`a.id IN (
+      SELECT text_article.id
+      FROM articles text_article
+      WHERE to_tsvector('portuguese', coalesce(text_article.title,'') || ' ' || coalesce(text_article.summary,'') || ' ' || coalesce(text_article.content_html,''))
+        @@ websearch_to_tsquery('portuguese', ${fullTextParameter})
+      UNION
+      SELECT author_article.id
+      FROM articles author_article
+      WHERE author_article.author_name ILIKE ${metadataParameter}
+         OR author_article.author_names::text ILIKE ${metadataParameter}
+      UNION
+      SELECT searched_at.article_id
+      FROM article_tags searched_at
+      JOIN tags searched_tag ON searched_tag.id=searched_at.tag_id
+      WHERE searched_tag.name ILIKE ${metadataParameter}
+      UNION
+      SELECT afr.article_id
+      FROM article_footnote_references afr
+      JOIN bibliographic_references br ON br.id=afr.reference_id
+      WHERE br.reference_text ILIKE ${metadataParameter}
     )`);
   }
   if (tag) {
