@@ -23,6 +23,7 @@ import { listPreviewFichamentos } from "@/lib/reference-fichamento-store";
 import { crossOriginMutationResponse } from "@/lib/request-security";
 import { readJsonBody } from "@/lib/request-json";
 import { purgeOptionalCloudflareCache } from "@/lib/cloudflare-cache";
+import { referenceListParameters } from "@/lib/reference-query";
 
 const referenceSchema = z.object({
   referenceHtml: z.string().trim().min(1).max(40_000).optional(),
@@ -52,6 +53,11 @@ type ReferenceRecord = {
   fichamentoTopicSets: string[][];
   fichamentoSearchText: string;
   duplicateCandidates?: DuplicateCandidate[];
+};
+
+type ReferenceSummary = Omit<ReferenceRecord, "usages" | "fichamentoTopicSets" | "fichamentoSearchText" | "duplicateCandidates"> & {
+  usageCount: number;
+  possibleDuplicates: Array<DuplicateCandidate & { similarity: number }>;
 };
 
 type DuplicateCandidate = Pick<ReferenceRecord, "id" | "referenceText" | "referenceHtml">;
@@ -137,13 +143,24 @@ function withDuplicateWarnings(references: ReferenceRecord[]) {
   }));
 }
 
-async function previewRecords() {
+function duplicateWarnings(reference: Pick<ReferenceRecord, "referenceText">, candidates: DuplicateCandidate[]) {
+  return candidates
+    .map((candidate) => ({
+      ...candidate,
+      similarity: referenceSimilarity(reference.referenceText, candidate.referenceText),
+    }))
+    .filter((candidate) => candidate.similarity >= 0.72)
+    .sort((left, right) => right.similarity - left.similarity)
+    .slice(0, 3);
+}
+
+async function previewRecord(id: string) {
   const [references, articles, fichamentos] = await Promise.all([
     listPreviewReferences(),
     listStoredArticles(),
     listPreviewFichamentos(),
   ]);
-  return withDuplicateWarnings(references.map((reference) => ({
+  const records = withDuplicateWarnings(references.filter((reference) => reference.id === id).map((reference) => ({
     id: reference.id,
     referenceText: reference.referenceText,
     referenceHtml: reference.referenceHtml || legacyReferenceHtml(reference.referenceText),
@@ -158,10 +175,12 @@ async function previewRecords() {
       .filter((item) => item.referenceId === reference.id)
       .map((item) => `${item.literalQuote} ${item.paraphrase} ${item.location} ${item.personalNote}`)
       .join(" "),
+    duplicateCandidates: similarPreviewReferences(reference.referenceText, references, reference.id),
   })));
+  return records[0] || null;
 }
 
-async function databaseRecords(): Promise<ReturnType<typeof withDuplicateWarnings>> {
+async function databaseRecord(id: string) {
   const result = await getPool().query(
     `SELECT br.id,
             br.reference_text AS "referenceText",
@@ -227,30 +246,175 @@ async function databaseRecords(): Promise<ReturnType<typeof withDuplicateWarning
      FROM bibliographic_references br
      LEFT JOIN article_footnote_references afr ON afr.reference_id=br.id
      LEFT JOIN articles a ON a.id=afr.article_id
+     WHERE br.id=$1
      GROUP BY br.id
-     ORDER BY lower(br.reference_text)`,
+     LIMIT 1`,
+    [id],
   );
-  return withDuplicateWarnings(result.rows.map((reference) => ({
+  const records = withDuplicateWarnings(result.rows.map((reference) => ({
     ...reference,
     referenceHtml: reference.referenceHtml || legacyReferenceHtml(reference.referenceText),
   })));
+  return records[0] || null;
 }
 
-async function listRecords() {
-  return !hasDatabaseConfig() && usesFileContentFallback() ? previewRecords() : databaseRecords();
+async function recordDetail(id: string) {
+  return !hasDatabaseConfig() && usesFileContentFallback() ? previewRecord(id) : databaseRecord(id);
 }
 
-function matchesSearch(reference: ReferenceRecord, query: string) {
-  if (!query) return true;
-  return normalizeReferenceText(reference.referenceText).includes(normalizeReferenceText(query));
+type ReferenceFilters = ReturnType<typeof referenceListParameters>;
+
+async function previewReferencePage(filters: ReferenceFilters) {
+  const [storedReferences, articles, fichamentos] = await Promise.all([
+    listPreviewReferences(),
+    listStoredArticles(),
+    listPreviewFichamentos(),
+  ]);
+  const query = normalizeReferenceText(filters.query);
+  const fichamentoQuery = normalizeReferenceText(filters.fichamentoQuery);
+  const selectedIds = new Set(filters.ids);
+  const filtered = storedReferences.filter((reference) => {
+    const linkedFichamentos = fichamentos.filter((item) => item.referenceId === reference.id);
+    const matchesReference = !query || reference.normalizedText.includes(query);
+    const matchesFichamento = !fichamentoQuery || linkedFichamentos.some((item) => normalizeReferenceText(
+      `${item.literalQuote} ${item.paraphrase} ${item.location} ${item.personalNote}`,
+    ).includes(fichamentoQuery));
+    const matchesTopics = !filters.topicIds.length || linkedFichamentos.some((item) =>
+      filters.topicIds.every((topicId) => item.topicIds.includes(topicId)),
+    );
+    return (!selectedIds.size || selectedIds.has(reference.id)) && matchesReference && matchesFichamento && matchesTopics;
+  }).sort((left, right) => left.referenceText.localeCompare(right.referenceText, "pt-BR"));
+  const pageSize = selectedIds.size ? 100 : filters.pageSize;
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const page = selectedIds.size ? 1 : Math.min(filters.page, pageCount);
+  const start = (page - 1) * pageSize;
+  const items: ReferenceSummary[] = filtered.slice(start, start + pageSize).map((reference) => {
+    const linkedFichamentos = fichamentos.filter((item) => item.referenceId === reference.id);
+    return {
+      id: reference.id,
+      referenceText: reference.referenceText,
+      referenceHtml: reference.referenceHtml || legacyReferenceHtml(reference.referenceText),
+      normalizedText: reference.normalizedText,
+      updatedAt: reference.updatedAt,
+      usageCount: previewUsages(reference.id, articles).length,
+      fichamentoCount: linkedFichamentos.length,
+      possibleDuplicates: duplicateWarnings(
+        reference,
+        similarPreviewReferences(reference.referenceText, storedReferences, reference.id),
+      ),
+    };
+  });
+  return { items, total: filtered.length, page, pageSize, pageCount };
+}
+
+function databaseFilterSql() {
+  return `($1::text = '' OR br.normalized_text ILIKE '%' || $1 || '%')
+    AND ($2::text = '' OR EXISTS (
+      SELECT 1
+      FROM reference_fichamentos rf_search
+      WHERE rf_search.reference_id=br.id
+        AND lower(rf_search.literal_quote || ' ' || rf_search.paraphrase || ' ' || rf_search.location || ' ' || rf_search.personal_note)
+          LIKE '%' || lower($2) || '%'
+    ))
+    AND (cardinality($3::uuid[]) = 0 OR EXISTS (
+      SELECT 1
+      FROM reference_fichamentos rf_topic
+      WHERE rf_topic.reference_id=br.id
+        AND NOT EXISTS (
+          SELECT 1
+          FROM unnest($3::uuid[]) selected_topic(id)
+          WHERE NOT EXISTS (
+            SELECT 1
+            FROM reference_fichamento_topic_links topic_link
+            WHERE topic_link.fichamento_id=rf_topic.id
+              AND topic_link.topic_id=selected_topic.id
+          )
+        )
+    ))
+    AND (cardinality($4::uuid[]) = 0 OR br.id=ANY($4::uuid[]))`;
+}
+
+async function databaseReferencePage(filters: ReferenceFilters) {
+  const normalizedQuery = normalizeReferenceText(filters.query);
+  const pageSize = filters.ids.length ? 100 : filters.pageSize;
+  const requestedPage = filters.ids.length ? 1 : filters.page;
+  const values = [normalizedQuery, filters.fichamentoQuery, filters.topicIds, filters.ids];
+  const where = databaseFilterSql();
+  const countResult = await getPool().query(
+    `SELECT COUNT(*)::int AS total FROM bibliographic_references br WHERE ${where}`,
+    values,
+  );
+  const total = Number(countResult.rows[0]?.total || 0);
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const page = Math.min(requestedPage, pageCount);
+  const result = await getPool().query(
+    `SELECT br.id,
+            br.reference_text AS "referenceText",
+            COALESCE(br.reference_html, '') AS "referenceHtml",
+            br.normalized_text AS "normalizedText",
+            br.updated_at::text AS "updatedAt",
+            (SELECT COUNT(*)::int
+             FROM article_footnote_references afr
+             WHERE afr.reference_id=br.id) AS "usageCount",
+            (SELECT COUNT(*)::int
+             FROM reference_fichamentos rf
+             WHERE rf.reference_id=br.id) AS "fichamentoCount",
+            COALESCE((
+              SELECT jsonb_agg(
+                jsonb_build_object(
+                  'id', candidate.id,
+                  'referenceText', candidate.reference_text,
+                  'referenceHtml', COALESCE(candidate.reference_html, '')
+                )
+                ORDER BY candidate.trigram_similarity DESC
+              )
+              FROM (
+                SELECT other.id,
+                       other.reference_text,
+                       other.reference_html,
+                       similarity(other.normalized_text, br.normalized_text) AS trigram_similarity
+                FROM bibliographic_references other
+                WHERE other.id <> br.id
+                  AND other.normalized_text % br.normalized_text
+                ORDER BY trigram_similarity DESC
+                LIMIT 24
+              ) candidate
+            ), '[]'::jsonb) AS "duplicateCandidates"
+     FROM bibliographic_references br
+     WHERE ${where}
+     ORDER BY lower(br.reference_text), br.id
+     LIMIT $5 OFFSET $6`,
+    [...values, pageSize, (page - 1) * pageSize],
+  );
+  const items: ReferenceSummary[] = result.rows.map((reference) => ({
+    ...reference,
+    referenceHtml: reference.referenceHtml || legacyReferenceHtml(reference.referenceText),
+    usageCount: Number(reference.usageCount),
+    fichamentoCount: Number(reference.fichamentoCount),
+    possibleDuplicates: duplicateWarnings(reference, reference.duplicateCandidates || []),
+  }));
+  return { items, total, page, pageSize, pageCount };
+}
+
+async function listReferencePage(filters: ReferenceFilters) {
+  return !hasDatabaseConfig() && usesFileContentFallback()
+    ? previewReferencePage(filters)
+    : databaseReferencePage(filters);
 }
 
 export async function GET(request: Request) {
   if (!(await authorized())) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   try {
-    const query = new URL(request.url).searchParams.get("q")?.trim() || "";
-    const references = await listRecords();
-    return NextResponse.json(references.filter((reference) => matchesSearch(reference, query)));
+    const filters = referenceListParameters(request.url);
+    if (filters.detailId) {
+      const detail = await recordDetail(filters.detailId);
+      return detail
+        ? NextResponse.json(detail, { headers: { "cache-control": "private, no-store, max-age=0" } })
+        : NextResponse.json({ error: "Referência não encontrada." }, { status: 404 });
+    }
+    return NextResponse.json(await listReferencePage(filters), {
+      headers: { "cache-control": "private, no-store, max-age=0" },
+    });
   } catch (error) {
     console.error("references_list_failed", error instanceof Error ? error.message : "unknown");
     return NextResponse.json({ error: "Não foi possível carregar as referências." }, { status: 503 });
@@ -388,8 +552,7 @@ export async function DELETE(request: Request) {
   const parsed = deleteSchema.safeParse(await readJsonBody(request));
   if (!parsed.success) return NextResponse.json({ error: "Referência inválida." }, { status: 400 });
 
-  const records = await listRecords();
-  const reference = records.find((item) => item.id === parsed.data.id);
+  const reference = await recordDetail(parsed.data.id);
   if (!reference) return NextResponse.json({ error: "Referência não encontrada." }, { status: 404 });
   if (reference.usages.length) {
     return NextResponse.json({

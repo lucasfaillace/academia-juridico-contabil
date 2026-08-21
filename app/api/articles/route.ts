@@ -202,6 +202,22 @@ export async function GET(request: Request) {
       const result = await getPool().query(`
         SELECT a.id, a.title, a.slug, a.summary, a.content_html, a.youtube_url, a.status, a.author_name, a.author_names, a.updated_at,
              COALESCE(c.name, 'Sem categoria') AS category,
+             COALESCE((
+               SELECT jsonb_agg(
+                 jsonb_build_object(
+                   'id', refs.id,
+                   'referenceText', refs.reference_text,
+                   'referenceHtml', COALESCE(refs.reference_html, '')
+                 )
+                 ORDER BY lower(refs.reference_text)
+               )
+               FROM (
+                 SELECT DISTINCT br.id, br.reference_text, br.reference_html
+                 FROM article_footnote_references afr
+                 JOIN bibliographic_references br ON br.id=afr.reference_id
+                 WHERE afr.article_id=a.id
+               ) refs
+             ), '[]'::jsonb) AS "bibliographicReferences",
              COALESCE(jsonb_agg(jsonb_build_object('id',t.id,'name',t.name,'slug',t.slug,'kind',t.kind) ORDER BY at.display_order, t.name)
                FILTER (WHERE t.name IS NOT NULL),'[]'::jsonb) AS tags
         FROM articles a

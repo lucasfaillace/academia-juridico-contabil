@@ -13,7 +13,11 @@ export APP_IMAGE_TAG="production-check"
 export APP_PORT="0"
 
 compose() {
-  docker compose --project-name "$check_project_name" "$@"
+  if [ -n "${COMPOSE_ENV_FILE:-}" ]; then
+    docker compose --env-file "$COMPOSE_ENV_FILE" --project-name "$check_project_name" "$@"
+  else
+    docker compose --project-name "$check_project_name" "$@"
+  fi
 }
 
 cleanup() {
@@ -51,5 +55,9 @@ if [ "$applied_migrations" -ne "$expected_migrations" ]; then
   echo "Migrações no banco (${applied_migrations}) divergem dos arquivos (${expected_migrations})." >&2
   exit 1
 fi
+
+# Exercita paginação e pesquisa com milhares de referências e um ano de
+# visualizações em uma transação descartada ao final.
+compose exec -T db sh -c 'psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB"' < scripts/check-scalability.sql
 
 echo "Compose isolado, imagem, migrações, bootstrap e healthcheck validados."

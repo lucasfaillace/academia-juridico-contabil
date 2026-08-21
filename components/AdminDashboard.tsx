@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { PublicationReferenceEditor } from "./PublicationReferenceEditor";
 import { RichEditor, type BibliographicReference } from "./RichEditor";
 import { StatisticsDashboard } from "./StatisticsDashboard";
+import { extractFootnoteReferenceLinks } from "@/lib/bibliographic-references";
 
 type AdminArticle = {
   id?: string;
@@ -17,6 +18,7 @@ type AdminArticle = {
   author_name?: string;
   author_names?: string[];
   tags?: AdminTag[];
+  bibliographicReferences?: BibliographicReference[];
   category: string;
   status: "draft" | "published";
   updated_at: string;
@@ -53,11 +55,16 @@ type ReferenceUsage = {
 };
 type AdminReference = BibliographicReference & {
   usageCount: number;
-  usages: ReferenceUsage[];
+  usages?: ReferenceUsage[];
   fichamentoCount: number;
-  fichamentoTopicSets: string[][];
-  fichamentoSearchText: string;
   possibleDuplicates: Array<BibliographicReference & { similarity: number }>;
+};
+type ReferencePageResponse = {
+  items: AdminReference[];
+  total: number;
+  page: number;
+  pageSize: number;
+  pageCount: number;
 };
 type FichamentoTopic = {
   id: string;
@@ -157,6 +164,12 @@ export function AdminDashboard({
   const [commentDraft, setCommentDraft] = useState("");
   const [publications, setPublications] = useState<AdminPublication[]>([]);
   const [references, setReferences] = useState<AdminReference[]>([]);
+  const [editorReferences, setEditorReferences] = useState<BibliographicReference[]>([]);
+  const [referencePage, setReferencePage] = useState(1);
+  const [referencePageCount, setReferencePageCount] = useState(1);
+  const [referenceTotal, setReferenceTotal] = useState(0);
+  const [loadingReferences, setLoadingReferences] = useState(false);
+  const [loadingReferenceDetailId, setLoadingReferenceDetailId] = useState<string>();
   const [referenceQuery, setReferenceQuery] = useState("");
   const [bibliographicReferenceDraft, setBibliographicReferenceDraft] = useState("");
   const [editingReferenceId, setEditingReferenceId] = useState<string>();
@@ -213,6 +226,7 @@ export function AdminDashboard({
   const [analyticsStatus, setAnalyticsStatus] = useState("");
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const articleRequestController = useRef<AbortController | null>(null);
+  const referenceRequestController = useRef<AbortController | null>(null);
 
   const loadArticles = useCallback(async () => {
     articleRequestController.current?.abort();
@@ -267,11 +281,69 @@ export function AdminDashboard({
   }, []);
 
   const loadReferences = useCallback(async () => {
-    const response = await fetch("/api/references");
-    const data = await response.json();
-    if (response.ok) setReferences(data);
-    else setNotice(data.error || "Não foi possível carregar as referências.");
+    referenceRequestController.current?.abort();
+    const controller = new AbortController();
+    referenceRequestController.current = controller;
+    setLoadingReferences(true);
+    const parameters = new URLSearchParams({
+      page: String(referencePage),
+      pageSize: "30",
+    });
+    if (referenceQuery.trim()) parameters.set("q", referenceQuery.trim());
+    if (referenceFichamentoQuery.trim()) parameters.set("fichamentoQ", referenceFichamentoQuery.trim());
+    if (selectedFichamentoFilterTopicIds.length) parameters.set("topicIds", selectedFichamentoFilterTopicIds.join(","));
+    try {
+      const response = await fetch(`/api/references?${parameters}`, { cache: "no-store", signal: controller.signal });
+      const data = await response.json();
+      if (response.ok) {
+        const page = data as ReferencePageResponse;
+        setReferences(page.items);
+        setReferencePage(page.page);
+        setReferencePageCount(page.pageCount);
+        setReferenceTotal(page.total);
+        setEditorReferences((current) => {
+          const merged = new Map(current.map((reference) => [reference.id, reference]));
+          for (const reference of page.items) merged.set(reference.id, reference);
+          return Array.from(merged.values());
+        });
+      } else setNotice(data.error || "Não foi possível carregar as referências.");
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError")) {
+        setNotice("Não foi possível carregar as referências.");
+      }
+    } finally {
+      if (referenceRequestController.current === controller) setLoadingReferences(false);
+    }
+  }, [referenceFichamentoQuery, referencePage, referenceQuery, selectedFichamentoFilterTopicIds]);
+
+  const mergeEditorReferences = useCallback((incoming: BibliographicReference[]) => {
+    setEditorReferences((current) => {
+      const merged = new Map(current.map((reference) => [reference.id, reference]));
+      for (const reference of incoming) merged.set(reference.id, reference);
+      return Array.from(merged.values());
+    });
   }, []);
+
+  const loadReferenceDetails = useCallback(async (referenceId: string) => {
+    setLoadingReferenceDetailId(referenceId);
+    const response = await fetch(`/api/references?id=${encodeURIComponent(referenceId)}`, { cache: "no-store" });
+    const data = await response.json();
+    setLoadingReferenceDetailId(undefined);
+    if (!response.ok) {
+      setNotice(data.error || "Não foi possível carregar as utilizações da referência.");
+      return;
+    }
+    setReferences((current) => current.map((reference) => reference.id === referenceId ? data : reference));
+    mergeEditorReferences([data]);
+  }, [mergeEditorReferences]);
+
+  const loadArticleReferences = useCallback(async (content: string) => {
+    const ids = Array.from(new Set(extractFootnoteReferenceLinks(content).map((link) => link.referenceId)));
+    if (!ids.length) return;
+    const response = await fetch(`/api/references?ids=${encodeURIComponent(ids.join(","))}`, { cache: "no-store" });
+    const data = await response.json();
+    if (response.ok) mergeEditorReferences((data as ReferencePageResponse).items);
+  }, [mergeEditorReferences]);
 
   const loadFichamentoTopics = useCallback(async () => {
     const response = await fetch("/api/fichamento-topics");
@@ -367,6 +439,7 @@ export function AdminDashboard({
     const articleAuthors = article.author_names?.length ? article.author_names : [article.author_name || defaultAuthorName];
     const articleTags = (article.tags || []).map((tag) => tag.slug);
     const content = article.content_html || emptyContent;
+    if (article.bibliographicReferences?.length) mergeEditorReferences(article.bibliographicReferences);
     setTitle(article.title);
     setSummary(article.summary || "");
     setYoutubeUrl(article.youtube_url || "");
@@ -378,6 +451,7 @@ export function AdminDashboard({
     setOriginalSlug(article.slug);
     setEditingStatus(article.status);
     setHtml(content);
+    void loadArticleReferences(content);
     setLastSavedDraft(articleDraftFingerprint({
       title: article.title,
       summary: article.summary || "",
@@ -391,7 +465,7 @@ export function AdminDashboard({
     setFocusedFootnote(footnoteId ? { id: footnoteId, requestId: crypto.randomUUID() } : undefined);
     setNotice("");
     setTab("editor");
-  }, [defaultAuthorName]);
+  }, [defaultAuthorName, loadArticleReferences, mergeEditorReferences]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => { void loadArticles(); }, 300);
@@ -427,15 +501,28 @@ export function AdminDashboard({
         if (response.ok) setPublications(data);
         else setNotice(data.error || "Não foi possível carregar as publicações.");
       });
-    void fetch("/api/references")
+    void fetch("/api/references?page=1&pageSize=30", { cache: "no-store" })
       .then(async (response) => ({ response, data: await response.json() }))
       .then(({ response, data }) => {
         if (!active) return;
-        if (response.ok) setReferences(data);
+        if (response.ok) {
+          const page = data as ReferencePageResponse;
+          setReferences(page.items);
+          setReferencePage(page.page);
+          setReferencePageCount(page.pageCount);
+          setReferenceTotal(page.total);
+          setEditorReferences(page.items);
+        }
         else setNotice(data.error || "Não foi possível carregar as referências.");
       });
     return () => { active = false; };
   }, [initialArticleSlug, openArticleEditor]);
+
+  useEffect(() => {
+    if (tab !== "references") return;
+    const timer = window.setTimeout(() => { void loadReferences(); }, 300);
+    return () => window.clearTimeout(timer);
+  }, [loadReferences, tab]);
 
   function newArticle() {
     window.history.replaceState(null, "", "/admin");
@@ -1159,6 +1246,7 @@ export function AdminDashboard({
   }
 
   function toggleFichamentoFilterTopic(topicId: string) {
+    setReferencePage(1);
     setSelectedFichamentoFilterTopicIds((current) =>
       current.includes(topicId)
         ? current.filter((id) => id !== topicId)
@@ -1187,19 +1275,8 @@ export function AdminDashboard({
   ] as const;
 
   const filteredArticles = articles;
-  const normalizedReferenceQuery = normalizeAdminSearch(referenceQuery);
   const normalizedFichamentoQuery = normalizeAdminSearch(referenceFichamentoQuery);
-  const filteredReferences = references.filter((reference) => {
-    const matchesText = !normalizedReferenceQuery
-      || normalizeAdminSearch(reference.referenceText).includes(normalizedReferenceQuery);
-    const matchesFichamento = !normalizedFichamentoQuery
-      || normalizeAdminSearch(reference.fichamentoSearchText || "").includes(normalizedFichamentoQuery);
-    const matchesTopics = !selectedFichamentoFilterTopicIds.length
-      || (reference.fichamentoTopicSets || []).some((topicIds) =>
-        selectedFichamentoFilterTopicIds.every((id) => topicIds.includes(id)),
-      );
-    return matchesText && matchesFichamento && matchesTopics;
-  });
+  const filteredReferences = references;
   const visibleFichamentoTopics = fichamentoTopics.filter((topic) =>
     normalizeAdminSearch(topic.name).includes(normalizeAdminSearch(referenceTopicQuery)),
   );
@@ -1207,7 +1284,7 @@ export function AdminDashboard({
   const relatedFichamentoCandidates = allReferenceFichamentos
     .filter((item) => item.id !== editingFichamentoId && !selectedRelatedFichamentoIds.includes(item.id))
     .filter((item) => {
-      const reference = references.find((candidate) => candidate.id === item.referenceId);
+      const reference = editorReferences.find((candidate) => candidate.id === item.referenceId);
       return !normalizedRelatedFichamentoQuery
         || normalizeAdminSearch(`${reference?.referenceText || ""} ${item.literalQuote} ${item.paraphrase} ${item.location}`)
           .includes(normalizedRelatedFichamentoQuery);
@@ -1637,18 +1714,19 @@ export function AdminDashboard({
                       publishedArticles={articles
                         .filter((article) => article.status === "published" && article.slug !== originalSlug)
                         .map((article) => ({ title: article.title, slug: article.slug }))}
-                      bibliographicReferences={references}
+                      bibliographicReferences={editorReferences}
+                      onReferencesLoaded={mergeEditorReferences}
                       focusFootnote={focusedFootnote}
                       onReferenceCreated={(reference) => {
-                        setReferences((current) => [...current, {
+                        const adminReference: AdminReference = {
                           ...reference,
                           usageCount: 0,
-                          usages: [],
                           fichamentoCount: 0,
-                          fichamentoTopicSets: [],
-                          fichamentoSearchText: "",
                           possibleDuplicates: [],
-                        }].sort((a, b) => a.referenceText.localeCompare(b.referenceText, "pt-BR")));
+                        };
+                        setReferences((current) => [...current, adminReference]
+                          .sort((a, b) => a.referenceText.localeCompare(b.referenceText, "pt-BR")));
+                        mergeEditorReferences([reference]);
                         void loadReferences();
                       }}
                     />
@@ -1863,7 +1941,10 @@ export function AdminDashboard({
                     : "Nenhum filtro por tema."}
                 </span>
                 {selectedFichamentoFilterTopicIds.length > 0 && (
-                  <button type="button" onClick={() => setSelectedFichamentoFilterTopicIds([])}>
+                  <button type="button" onClick={() => {
+                    setSelectedFichamentoFilterTopicIds([]);
+                    setReferencePage(1);
+                  }}>
                     <X size={13} aria-hidden="true" />Limpar temas
                   </button>
                 )}
@@ -1960,7 +2041,7 @@ export function AdminDashboard({
               <details id="references-list-panel" className="admin-section reference-panel" name="reference-main-panels">
                 <summary>
                   <span>Referências cadastradas</span>
-                  <small>{filteredReferences.length} de {references.length}</small>
+                  <small>{referenceTotal} {referenceTotal === 1 ? "registro" : "registros"}</small>
                 </summary>
                 <div className="reference-panel-body reference-admin-list">
                 <div className="admin-section-heading">
@@ -1971,7 +2052,10 @@ export function AdminDashboard({
                       <input
                         type="search"
                         value={referenceQuery}
-                        onChange={(event) => setReferenceQuery(event.target.value)}
+                        onChange={(event) => {
+                          setReferenceQuery(event.target.value);
+                          setReferencePage(1);
+                        }}
                         placeholder="Pesquisar autor, título ou expressão"
                       />
                     </label>
@@ -1981,7 +2065,10 @@ export function AdminDashboard({
                         type="search"
                         value={referenceFichamentoQuery}
                         onFocus={() => void loadReferences()}
-                        onChange={(event) => setReferenceFichamentoQuery(event.target.value)}
+                        onChange={(event) => {
+                          setReferenceFichamentoQuery(event.target.value);
+                          setReferencePage(1);
+                        }}
                         placeholder="Citação, anotação, página ou observação"
                       />
                     </label>
@@ -1992,7 +2079,7 @@ export function AdminDashboard({
                     {unsavedFichamentoMatchesSearch
                       ? "A expressão também está no formulário aberto, mas esse registro ainda precisa ser salvo para integrar a pesquisa geral."
                       : filteredReferences.length
-                        ? `${filteredReferences.length} ${filteredReferences.length === 1 ? "referência encontrada" : "referências encontradas"} com os filtros atuais.`
+                        ? `${referenceTotal} ${referenceTotal === 1 ? "referência encontrada" : "referências encontradas"} com os filtros atuais.`
                         : `Nenhum fichamento salvo contém “${referenceFichamentoQuery.trim()}”.`}
                   </p>
                 )}
@@ -2011,13 +2098,18 @@ export function AdminDashboard({
                           )}
                         </div>
                         <div className="reference-usages">
-                          {reference.usages?.length ? (
-                            <details>
+                          {reference.usageCount > 0 ? (
+                            <details onToggle={(event) => {
+                              if (event.currentTarget.open && !reference.usages && loadingReferenceDetailId !== reference.id) {
+                                void loadReferenceDetails(reference.id);
+                              }
+                            }}>
                               <summary>
-                                {reference.usageCount || reference.usages.length} {(reference.usageCount || reference.usages.length) === 1 ? "utilização" : "utilizações"}
+                                {reference.usageCount} {reference.usageCount === 1 ? "utilização" : "utilizações"}
                               </summary>
                               <div>
-                                {reference.usages.map((usage) => (
+                                {loadingReferenceDetailId === reference.id && <span>Carregando utilizações…</span>}
+                                {reference.usages?.map((usage) => (
                                   <button
                                     type="button"
                                     key={`${usage.articleSlug}-${usage.footnoteId}-${usage.occurrenceIndex}`}
@@ -2030,6 +2122,9 @@ export function AdminDashboard({
                                     {usage.citationDetails && <small>{usage.citationDetails}</small>}
                                   </button>
                                 ))}
+                                {!reference.usages && loadingReferenceDetailId !== reference.id && (
+                                  <button type="button" onClick={() => void loadReferenceDetails(reference.id)}>Carregar utilizações</button>
+                                )}
                               </div>
                             </details>
                           ) : (
@@ -2219,7 +2314,7 @@ export function AdminDashboard({
                                   <div className="selected-fichamento-links">
                                     {selectedRelatedFichamentoIds.map((id) => {
                                       const target = allReferenceFichamentos.find((item) => item.id === id);
-                                      const targetReference = references.find((item) => item.id === target?.referenceId);
+                                      const targetReference = editorReferences.find((item) => item.id === target?.referenceId);
                                       return (
                                         <div key={id}>
                                           <span>
@@ -2267,7 +2362,7 @@ export function AdminDashboard({
                                     <div className="fichamento-related-results">
                                       {loadingRelatedFichamentos && <p>Carregando fichamentos…</p>}
                                       {!loadingRelatedFichamentos && relatedFichamentoCandidates.map((candidate) => {
-                                        const candidateReference = references.find((item) => item.id === candidate.referenceId);
+                                        const candidateReference = editorReferences.find((item) => item.id === candidate.referenceId);
                                         return (
                                           <button
                                             type="button"
@@ -2424,6 +2519,28 @@ export function AdminDashboard({
                     <p>Nenhuma referência ou fichamento corresponde aos filtros.</p>
                   )}
                 </div>
+                {loadingReferences && <p className="admin-loading" aria-live="polite">Carregando referências…</p>}
+                {referencePageCount > 1 && (
+                  <nav className="admin-pagination" aria-label="Paginação das referências">
+                    <button
+                      className="button secondary"
+                      type="button"
+                      disabled={referencePage <= 1 || loadingReferences}
+                      onClick={() => setReferencePage((page) => Math.max(1, page - 1))}
+                    >
+                      Anterior
+                    </button>
+                    <span>Página {referencePage} de {referencePageCount}</span>
+                    <button
+                      className="button secondary"
+                      type="button"
+                      disabled={referencePage >= referencePageCount || loadingReferences}
+                      onClick={() => setReferencePage((page) => Math.min(referencePageCount, page + 1))}
+                    >
+                      Próxima
+                    </button>
+                  </nav>
+                )}
                 </div>
               </details>
             </section>

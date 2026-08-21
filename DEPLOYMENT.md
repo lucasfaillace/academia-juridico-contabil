@@ -91,7 +91,9 @@ Use a primeira saída em `POSTGRES_PASSWORD`, a segunda em `AUTH_SECRET` e a ter
 - administrador (`ADMIN_EMAIL`; o hash será criado no passo 7);
 - SMTP e endereços do formulário de contato.
 
-As exportações administrativas possuem limites preventivos configuráveis em `MAX_BULK_ARTICLE_EXPORT`, `MAX_REFERENCE_EXPORT` e `MAX_FICHAMENTO_EXPORT`. Os padrões atendem um acervo amplo e evitam que uma única solicitação consuma toda a memória da VPS. O ZIP de artigos é enviado progressivamente e cada DOCX é produzido em sequência; aumente os limites somente depois de medir a memória no servidor. A exportação individual de artigos não é afetada.
+As exportações administrativas possuem limites preventivos configuráveis em `MAX_BULK_ARTICLE_EXPORT`, `MAX_REFERENCE_EXPORT` e `MAX_FICHAMENTO_EXPORT`. Para a VPS mínima de 4 GB, os padrões são, respectivamente, **200 artigos**, **2.000 referências** e **5.000 fichamentos**. O código não aceita valores superiores a 1.000, 10.000 e 25.000 sem uma nova revisão técnica. O ZIP de artigos é enviado progressivamente e cada DOCX é produzido em sequência; aumente os limites somente depois de medir memória e tempo de resposta no servidor. A exportação individual de artigos não é afetada.
+
+As referências administrativas são paginadas e pesquisadas no PostgreSQL. Utilizações e fichamentos detalhados são obtidos somente quando o respectivo painel é aberto. As estatísticas usam agregados diários, preservando os eventos brutos. A arquitetura e a conferência de integridade estão descritas em `docs/ESCALABILIDADE_ETAPA_4.md`.
 
 Valide sem exibir segredos:
 

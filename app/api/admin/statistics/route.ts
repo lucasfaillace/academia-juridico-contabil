@@ -33,26 +33,25 @@ export async function GET(request: Request) {
       const [summaryResult, pointResult] = await Promise.all([
         getPool().query(
           `SELECT a.slug, a.title,
-                  COUNT(v.id)::int AS total_views,
-                  COUNT(v.id) FILTER (
+                  COALESCE(SUM(v.views), 0)::bigint AS total_views,
+                  COALESCE(SUM(v.views) FILTER (
                     WHERE v.viewed_on >= (CURRENT_TIMESTAMP AT TIME ZONE 'America/Bahia')::date - 6
-                  )::int AS views_7,
-                  COUNT(v.id) FILTER (
+                  ), 0)::bigint AS views_7,
+                  COALESCE(SUM(v.views) FILTER (
                     WHERE v.viewed_on >= (CURRENT_TIMESTAMP AT TIME ZONE 'America/Bahia')::date - 29
-                  )::int AS views_30,
-                  MAX(v.viewed_on)::text AS last_viewed_at
+                  ), 0)::bigint AS views_30,
+                  MAX(v.viewed_on) FILTER (WHERE v.views > 0)::text AS last_viewed_at
            FROM articles a
-           LEFT JOIN article_views v ON v.article_id=a.id
+           LEFT JOIN article_view_daily_totals v ON v.article_id=a.id
            GROUP BY a.id, a.slug, a.title
            ORDER BY a.title`,
         ),
         getPool().query(
-          `SELECT a.slug, v.viewed_on::text AS date, COUNT(*)::int AS views
-           FROM article_views v
+          `SELECT a.slug, v.viewed_on::text AS date, v.views::bigint AS views
+           FROM article_view_daily_totals v
            JOIN articles a ON a.id=v.article_id
            WHERE ($1::int IS NULL OR v.viewed_on >=
              (CURRENT_TIMESTAMP AT TIME ZONE 'America/Bahia')::date - ($1::int - 1))
-           GROUP BY a.slug, v.viewed_on
            ORDER BY v.viewed_on`,
           [historyDays],
         ),

@@ -809,6 +809,7 @@ function FootnoteBibliographyEditor({
   onChange,
   onInsertFichamentoText,
   onReferenceCreated,
+  onReferencesLoaded,
 }: {
   noteNumber: number;
   segment: FootnoteReferenceSegment;
@@ -817,20 +818,53 @@ function FootnoteBibliographyEditor({
   onChange: (segment: FootnoteReferenceSegment) => void;
   onInsertFichamentoText: (text: string, kind: "literal" | "paraphrase") => void;
   onReferenceCreated: (reference: BibliographicReference) => void;
+  onReferencesLoaded?: (references: BibliographicReference[]) => void;
 }) {
   const [query, setQuery] = useState("");
+  const [remoteReferences, setRemoteReferences] = useState<BibliographicReference[]>([]);
+  const [searchingReferences, setSearchingReferences] = useState(false);
   const [creating, setCreating] = useState(false);
   const [referenceDraft, setReferenceDraft] = useState("");
   const [notice, setNotice] = useState("");
   const [similarReferences, setSimilarReferences] = useState<BibliographicReference[]>([]);
   const [saving, setSaving] = useState(false);
-  const selected = references.find((reference) => reference.id === segment.referenceId);
+  const availableReferences = Array.from(new Map(
+    [...references, ...remoteReferences].map((reference) => [reference.id, reference]),
+  ).values());
+  const selected = availableReferences.find((reference) => reference.id === segment.referenceId);
   const invalidIbid = segment.presentation === "ibid"
     && (!previousReferenceId || segment.referenceId !== previousReferenceId);
   const normalizedQuery = normalizeSearch(query);
-  const filteredReferences = references
+  const filteredReferences = availableReferences
     .filter((reference) => !normalizedQuery || normalizeSearch(reference.referenceText).includes(normalizedQuery))
     .slice(0, 12);
+
+  useEffect(() => {
+    if (query.trim().length < 2 || selected) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setSearchingReferences(true);
+      const parameters = new URLSearchParams({ q: query.trim(), page: "1", pageSize: "20" });
+      void fetch(`/api/references?${parameters}`, { cache: "no-store", signal: controller.signal })
+        .then(async (response) => ({ response, data: await response.json() }))
+        .then(({ response, data }) => {
+          if (!response.ok) throw new Error(data.error || "Não foi possível pesquisar as referências.");
+          const items = Array.isArray(data.items) ? data.items as BibliographicReference[] : [];
+          setRemoteReferences(items);
+          onReferencesLoaded?.(items);
+        })
+        .catch((error) => {
+          if (!(error instanceof DOMException && error.name === "AbortError")) {
+            setNotice(error instanceof Error ? error.message : "Não foi possível pesquisar as referências.");
+          }
+        })
+        .finally(() => setSearchingReferences(false));
+    }, 250);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [onReferencesLoaded, query, selected]);
 
   async function createReference(confirmSimilar = false) {
     setSaving(true);
@@ -934,6 +968,7 @@ function FootnoteBibliographyEditor({
                 <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Digite autor, título ou expressão" />
               </label>
               <div className="footnote-reference-results">
+                {searchingReferences && <p>Pesquisando referências…</p>}
                 {filteredReferences.map((reference) => (
                   <button
                     type="button"
@@ -1149,6 +1184,7 @@ export function RichEditor({
   bibliographicReferences = [],
   focusFootnote,
   onReferenceCreated,
+  onReferencesLoaded,
 }: {
   value: string;
   onChange: (html: string) => void;
@@ -1156,6 +1192,7 @@ export function RichEditor({
   bibliographicReferences?: BibliographicReference[];
   focusFootnote?: { id: string; requestId: string };
   onReferenceCreated?: (reference: BibliographicReference) => void;
+  onReferencesLoaded?: (references: BibliographicReference[]) => void;
 }) {
   const [footnotes, setFootnotes] = useState<FootnoteItem[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -1874,6 +1911,7 @@ export function RichEditor({
                                 updateFootnoteSegments(item, next);
                               }}
                               onReferenceCreated={(reference) => onReferenceCreated?.(reference)}
+                              onReferencesLoaded={onReferencesLoaded}
                             />
                           )}
                         </section>

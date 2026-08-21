@@ -66,12 +66,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     } else {
       const pool = getPool();
       const result = await pool.query(
-        `INSERT INTO article_views(article_id, viewed_on, dedupe_key)
-         SELECT id, $2::date, $3
-         FROM articles
-         WHERE slug=$1 AND status='published'
-         ON CONFLICT (dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING
-         RETURNING id`,
+        `WITH inserted_view AS (
+           INSERT INTO article_views(article_id, viewed_on, dedupe_key)
+           SELECT id, $2::date, $3
+           FROM articles
+           WHERE slug=$1 AND status='published'
+           ON CONFLICT (dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING
+           RETURNING article_id, viewed_on
+         )
+         INSERT INTO article_view_daily_totals(article_id, viewed_on, views)
+         SELECT article_id, viewed_on, COUNT(*)::bigint
+         FROM inserted_view
+         GROUP BY article_id, viewed_on
+         ON CONFLICT (article_id, viewed_on) DO UPDATE SET
+           views=article_view_daily_totals.views + EXCLUDED.views,
+           updated_at=now()
+         RETURNING article_id`,
         [slug, viewDateInBahia(), key],
       );
       counted = Boolean(result.rowCount);

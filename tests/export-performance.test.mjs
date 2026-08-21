@@ -19,9 +19,9 @@ test("usa limites seguros quando a configuração de exportação é inválida",
   process.env.MAX_REFERENCE_EXPORT = "não-numérico";
   process.env.MAX_FICHAMENTO_EXPORT = "100001";
   try {
-    assert.equal(articleExportLimit(), 500);
-    assert.equal(referenceExportLimit(), 5000);
-    assert.equal(fichamentoExportLimit(), 20_000);
+    assert.equal(articleExportLimit(), 200);
+    assert.equal(referenceExportLimit(), 2000);
+    assert.equal(fichamentoExportLimit(), 5000);
   } finally {
     for (const [key, value] of Object.entries({
       MAX_BULK_ARTICLE_EXPORT: previous.articles,

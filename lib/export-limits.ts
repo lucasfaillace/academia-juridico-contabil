@@ -17,13 +17,13 @@ function configuredLimit(name: string, fallback: number, ceiling: number) {
 }
 
 export function articleExportLimit() {
-  return configuredLimit("MAX_BULK_ARTICLE_EXPORT", 500, 5000);
+  return configuredLimit("MAX_BULK_ARTICLE_EXPORT", 200, 1000);
 }
 
 export function referenceExportLimit() {
-  return configuredLimit("MAX_REFERENCE_EXPORT", 5000, 20_000);
+  return configuredLimit("MAX_REFERENCE_EXPORT", 2000, 10_000);
 }
 
 export function fichamentoExportLimit() {
-  return configuredLimit("MAX_FICHAMENTO_EXPORT", 20_000, 100_000);
+  return configuredLimit("MAX_FICHAMENTO_EXPORT", 5000, 25_000);
 }

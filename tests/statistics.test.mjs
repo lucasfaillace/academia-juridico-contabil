@@ -31,3 +31,18 @@ test("preserva totais históricos quando os pontos recebidos já estão limitado
   assert.equal(statistics.articles[0].periodViews, 3);
   assert.equal(statistics.articles[0].lastViewedAt, today);
 });
+
+test("agrega meses de visualizações diárias sem depender dos eventos brutos", () => {
+  const today = todayInBahia();
+  const articles = Array.from({ length: 250 }, (_, index) => ({ slug: `artigo-${index}`, title: `Artigo ${index}` }));
+  const points = articles.flatMap((article, articleIndex) => Array.from({ length: 365 }, (_, offset) => {
+    const date = new Date(`${today}T12:00:00-03:00`);
+    date.setDate(date.getDate() - offset);
+    return { slug: article.slug, date: date.toISOString().slice(0, 10), views: (articleIndex + offset) % 7 };
+  }));
+  const statistics = buildStatistics(articles, points, "365");
+  assert.equal(statistics.articles.length, 250);
+  assert.equal(statistics.daily.length, 365);
+  assert.equal(statistics.articles[0].trend.length, 365);
+  assert.equal(statistics.overview.periodViews, points.reduce((sum, point) => sum + point.views, 0));
+});

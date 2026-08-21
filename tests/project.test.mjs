@@ -834,7 +834,8 @@ test("mantém limpeza de deduplicação fora do pageview e filtra o histórico e
   assert.match(migration, /WHERE dedupe_key IS NOT NULL/);
   assert.match(statisticsRoute, /historyDays = period === "all" \? null/);
   assert.match(statisticsRoute, /WHERE \(\$1::int IS NULL OR v\.viewed_on >=/);
-  assert.match(statisticsRoute, /COUNT\(v\.id\) FILTER/);
+  assert.match(statisticsRoute, /SUM\(v\.views\) FILTER/);
+  assert.match(statisticsRoute, /article_view_daily_totals/);
   assert.match(statisticsRoute, /buildStatistics\(articles, points, period, summaries\)/);
   assert.match(deployment, /cleanup-view-dedupe\.mjs/);
   assert.match(dockerfile, /COPY --from=builder --chown=nextjs:nodejs \/app\/scripts \.\/scripts/);
@@ -865,6 +866,38 @@ test("limita exportações, transmite o ZIP e pré-seleciona duplicatas por índ
   assert.doesNotMatch(fichamentosExport, /fichamentosResult\.rows\.filter/);
   assert.match(compose, /MAX_BULK_ARTICLE_EXPORT/);
   assert.match(deployment, /ZIP de artigos é enviado progressivamente/);
+});
+
+test("pagina referências, carrega detalhes sob demanda e agrega visualizações por dia", async () => {
+  const [references, dashboard, editor, aggregateMigration, viewRoute, statisticsRoute, limits, compose, productionCheck, scaleCheck] = await Promise.all([
+    readFile(new URL("app/api/references/route.ts", root), "utf8"),
+    readFile(new URL("components/AdminDashboard.tsx", root), "utf8"),
+    readFile(new URL("components/RichEditor.tsx", root), "utf8"),
+    readFile(new URL("migrations/020_article_view_daily_totals.sql", root), "utf8"),
+    readFile(new URL("app/api/articles/[slug]/views/route.ts", root), "utf8"),
+    readFile(new URL("app/api/admin/statistics/route.ts", root), "utf8"),
+    readFile(new URL("lib/export-limits.ts", root), "utf8"),
+    readFile(new URL("docker-compose.yml", root), "utf8"),
+    readFile(new URL("scripts/check-production.sh", root), "utf8"),
+    readFile(new URL("scripts/check-scalability.sql", root), "utf8"),
+  ]);
+  assert.match(references, /LIMIT \$5 OFFSET \$6/);
+  assert.match(references, /fichamentoQ/);
+  assert.match(references, /topicIds/);
+  assert.match(references, /filters\.detailId/);
+  assert.match(dashboard, /referencePageCount/);
+  assert.match(dashboard, /loadReferenceDetails/);
+  assert.match(editor, /Pesquisando referências/);
+  assert.match(aggregateMigration, /INSERT INTO article_view_daily_totals/);
+  assert.match(aggregateMigration, /FROM article_views/);
+  assert.match(viewRoute, /WITH inserted_view AS/);
+  assert.match(viewRoute, /views=article_view_daily_totals\.views \+ EXCLUDED\.views/);
+  assert.match(statisticsRoute, /FROM article_view_daily_totals/);
+  assert.match(limits, /MAX_BULK_ARTICLE_EXPORT", 200, 1000/);
+  assert.match(compose, /MAX_REFERENCE_EXPORT:-2000/);
+  assert.match(productionCheck, /check-scalability\.sql/);
+  assert.match(scaleCheck, /generate_series\(1, 5000\)/);
+  assert.match(scaleCheck, /generate_series\(0, 364\)/);
 });
 
 test("oferece prévia privada de rascunhos no mesmo layout público", async () => {
@@ -935,7 +968,7 @@ test("organiza a edição do artigo em painéis recolhíveis sem mover as açõe
   assert.match(editor, /\+ Adicionar referência/);
   assert.doesNotMatch(editor, /Use os intertítulos de níveis 1 e 2 sem digitar números/);
   assert.doesNotMatch(dashboard, /Comece a escrever o artigo/);
-  assert.match(dashboard, /<details>[\s\S]*reference\.usageCount/);
+  assert.match(dashboard, /<details onToggle=[\s\S]*reference\.usageCount/);
   assert.match(dashboard, /editArticle\(article, usage\.footnoteId\)/);
   assert.match(editor, /focusFootnote/);
   assert.match(editor, /editor-footnote-\$\{focusFootnote\.id\}/);
