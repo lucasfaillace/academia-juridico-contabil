@@ -369,6 +369,8 @@ Agendamento diário às 03:15 UTC:
 
 Substituir ou excluir uma publicação remove o PDF anterior somente depois da confirmação no banco e desde que nenhuma outra publicação use a mesma chave. A importação de Word é processada em memória e não conserva uma cópia `.docx` sem vínculo.
 
+Antes de chamar o conversor Word, o servidor inspeciona o contêiner ZIP sem extrair arquivos no disco. Os limites fixados no código são: 15 MiB compactados, 64 MiB descompactados, 1.024 entradas, taxa máxima de expansão de 100:1, 100 imagens, 8 MiB por imagem e 32 MiB para a soma das imagens. XML interno fica limitado a 16 MiB e o HTML resultante ao mesmo teto de 2 milhões de caracteres aceito pelo artigo. Documentos criptografados, ZIP64, caminhos internos inseguros, estruturas inconsistentes e imagens que não sejam JPG, PNG ou WebP são rejeitados. Esses limites protegem a memória da VPS e não dependem da Cloudflare.
+
 Para localizar arquivos antigos que já estejam órfãos, faça primeiro um backup e execute a simulação. Ela consulta artigos e publicações no PostgreSQL, ignora arquivos referenciados, arquivos ocultos e uploads modificados nas últimas 24 horas:
 
 ```bash

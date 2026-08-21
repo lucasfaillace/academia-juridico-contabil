@@ -47,3 +47,11 @@ executa as migrações duas vezes, inicia o entrypoint real de produção e cons
 o healthcheck. Ao terminar, remove somente os contêineres e volumes identificados
 pelo prefixo exclusivo `academia-production-check-`; os volumes da aplicação não
 são acessados.
+
+## Importação de Word
+
+Arquivos `.docx` são tratados como entrada não confiável. Antes da conversão, a
+aplicação valida a estrutura ZIP/Word, rejeita arquivos criptografados ou ZIP64 e
+impõe limites de tamanho compactado, expansão, entradas e imagens. Somente imagens
+JPG, PNG e WebP cuja assinatura corresponda ao tipo declarado são aceitas. A cópia
+original do `.docx` não é persistida.

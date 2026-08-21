@@ -998,10 +998,11 @@ test("normaliza cada upload em somente duas versões WebP proporcionais", async 
 });
 
 test("remove uploads obsoletos somente após desvinculação e oferece reconciliação segura", async () => {
-  const [storage, publications, docxImport, reconciliation, deployment, dockerfile] = await Promise.all([
+  const [storage, publications, docxImport, docxSecurity, reconciliation, deployment, dockerfile] = await Promise.all([
     readFile(new URL("lib/storage.ts", root), "utf8"),
     readFile(new URL("app/api/publications/route.ts", root), "utf8"),
     readFile(new URL("app/api/import-docx/route.ts", root), "utf8"),
+    readFile(new URL("lib/docx-security.ts", root), "utf8"),
     readFile(new URL("scripts/reconcile-uploads.mjs", root), "utf8"),
     readFile(new URL("DEPLOYMENT.md", root), "utf8"),
     readFile(new URL("Dockerfile", root), "utf8"),
@@ -1017,6 +1018,17 @@ test("remove uploads obsoletos somente após desvinculação e oferece reconcili
   assert.match(publications, /removePreviewPdfIfUnused/);
   assert.doesNotMatch(docxImport, /saveOriginal/);
   assert.doesNotMatch(docxImport, /originalKey/);
+  assert.match(docxImport, /inspectDocxArchive\(buffer\)/);
+  assert.match(docxImport, /validateEmbeddedImage/);
+  assert.match(docxImport, /externalFileAccess: false/);
+  assert.match(docxImport, /MAX_MULTIPART_BYTES/);
+  assert.match(docxImport, /DOCX_CONTENT_TYPES/);
+  assert.match(docxImport, /form = await request\.formData\(\)/);
+  assert.match(docxSecurity, /maxTotalUncompressedBytes: 64 \* MIB/);
+  assert.match(docxSecurity, /maxCompressionRatio: 100/);
+  assert.match(docxSecurity, /maxImages: 100/);
+  assert.match(docxSecurity, /ENCRYPTED_FLAG/);
+  assert.match(docxSecurity, /unzipSync/);
   assert.match(reconciliation, /process\.argv\.includes\("--apply"\)/);
   assert.match(reconciliation, /minimumAgeHours/);
   assert.match(reconciliation, /SELECT content_html FROM articles/);
