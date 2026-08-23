@@ -22,7 +22,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:17-alpine
+        image: postgres:18-alpine
         env:
           POSTGRES_DB: academia_ci
           POSTGRES_USER: academia_ci

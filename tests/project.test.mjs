@@ -32,7 +32,10 @@ test("inclui controles de segurança e portabilidade", async () => {
     readFile(new URL("next.config.ts", root), "utf8"),
     readFile(new URL("lib/cloudflare-cache.ts", root), "utf8"),
   ]);
-  assert.match(compose, /postgres:17-alpine/); assert.match(env, /AUTH_SECRET/); assert.match(migration, /CHECK \(status IN \('draft','published'\)\)/);
+  assert.match(compose, /postgres:18-alpine/);
+  assert.match(compose, /postgres_data:\/var\/lib\/postgresql(?:\r?\n|$)/);
+  assert.doesNotMatch(compose, /postgres_data:\/var\/lib\/postgresql\/data/);
+  assert.match(env, /AUTH_SECRET/); assert.match(migration, /CHECK \(status IN \('draft','published'\)\)/);
   assert.match(articleApi, /sanitizeArticleContent/); assert.match(articleContentSecurity, /sanitizeHtml/); assert.match(articleContentSecurity, /data-footnote/); assert.match(editor, /Inserir nota de rodapé/);
   assert.match(editor, /footnote-number/); assert.match(editor, /footnote-formatting/);
   assert.match(articleHtml, /addFootnoteNumberLinks/);
@@ -156,7 +159,7 @@ test("mantém CI com build, PostgreSQL, migrações e validação Docker", async
     readFile(new URL("scripts/check-production.sh", root), "utf8"),
   ]);
   assert.match(workflow, /permissions:\s*\n\s*contents: read/);
-  assert.match(workflow, /postgres:17-alpine/);
+  assert.match(workflow, /postgres:18-alpine/);
   assert.match(workflow, /pnpm install --frozen-lockfile/);
   assert.match(workflow, /pnpm lint/);
   assert.match(workflow, /pnpm typecheck/);
