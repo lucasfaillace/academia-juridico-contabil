@@ -119,9 +119,11 @@ test("Docker Compose interpreta o hash escapado sem barras", { skip: !composeAva
       "      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH}",
       "",
     ].join("\n"), "utf8");
+    const composeEnvironment = { ...process.env };
+    delete composeEnvironment.ADMIN_PASSWORD_HASH;
     const result = await run(composeCommand, [...composePrefix, "-f", composeFile, "--env-file", envFile, "config", "--environment"], {
       cwd: directory,
-      env: process.env,
+      env: composeEnvironment,
       stdio: ["ignore", "pipe", "pipe"],
     });
     assert.equal(result.code, 0, result.stderr);
