@@ -1,6 +1,6 @@
 # Implantação em Ubuntu ou Debian
 
-Este roteiro instala a Academia em uma única VPS. A aplicação e o PostgreSQL ficam em contêineres; Nginx e Certbot ficam no host. As referências oficiais são a documentação de [Docker para Ubuntu](https://docs.docker.com/engine/install/ubuntu/), [Docker para Debian](https://docs.docker.com/engine/install/debian/), [proxy reverso do Nginx](https://nginx.org/en/docs/http/ngx_http_proxy_module.html) e [Certbot com Nginx](https://certbot.eff.org/instructions?ws=nginx&os=snap).
+Este roteiro instala a Academia em uma única VPS gerenciada pelo CloudPanel. A aplicação e o PostgreSQL ficam em contêineres; o CloudPanel gerencia Nginx, domínio, certificado SSL e proxy reverso. As referências oficiais são a documentação de [Docker para Ubuntu](https://docs.docker.com/engine/install/ubuntu/), [Docker para Debian](https://docs.docker.com/engine/install/debian/), [Vhost Editor do CloudPanel](https://www.cloudpanel.io/docs/v2/frontend-area/vhost/) e [proxy reverso do Nginx](https://nginx.org/en/docs/http/ngx_http_proxy_module.html).
 
 Substitua nos comandos:
 
@@ -15,11 +15,11 @@ Use Ubuntu 24.04/26.04 LTS ou Debian 12/13 de 64 bits. Entre por SSH com usuári
 ```bash
 sudo apt update
 sudo apt full-upgrade -y
-sudo apt install -y ca-certificates curl git nginx snapd openssl ufw rsync
+sudo apt install -y ca-certificates curl git openssl ufw rsync
 sudo timedatectl set-timezone UTC
-sudo systemctl enable --now nginx snapd
 sudo ufw allow OpenSSH
-sudo ufw allow 'Nginx Full'
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
 sudo ufw --force enable
 ```
 
@@ -84,7 +84,7 @@ nano .env
 
 Use a primeira saída em `POSTGRES_PASSWORD`, a segunda em `AUTH_SECRET` e a terceira em `ANALYTICS_HASH_SECRET`. Configure:
 
-- `NEXT_PUBLIC_SITE_URL=https://academia.seudominio.br`;
+- `NEXT_PUBLIC_SITE_URL=https://academia.seudominio.br` (somente a origem canônica, sem `www` e sem barra final);
 - `NEXT_PUBLIC_GA_MEASUREMENT_ID=G-XXXXXXXXXX` (opcional; fallback inicial do Google Analytics 4);
 - `ANALYTICS_HASH_SECRET=` com o terceiro segredo gerado;
 - PostgreSQL (`POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`);
@@ -153,6 +153,15 @@ cd /opt/academia/app
 
 O script solicita e-mail e senha, gera um hash scrypt com salt aleatório e atualiza apenas `ADMIN_EMAIL` e `ADMIN_PASSWORD_HASH` no `.env`. Depois:
 
+Como o hash scrypt contém caracteres `$`, o script grava o valor entre aspas
+duplas e escapa cada dólar como `\$`. Esse é o formato que preserva o hash
+original tanto ao carregar o `.env` no Next local quanto ao interpolá-lo pelo
+Docker Compose. Se precisar preencher manualmente, use o mesmo formato:
+
+```dotenv
+ADMIN_PASSWORD_HASH="scrypt\$16384\$8\$1\$SAL\$HASH"
+```
+
 ```bash
 docker compose up -d --force-recreate app
 ```
@@ -163,26 +172,26 @@ A senha deve conter pelo menos 12 caracteres. Depois do primeiro acesso, o admin
 
 O Google Analytics 4 pode ser ativado em **Configurações → Google Analytics 4**. Informe o ID `G-...` e salve; a alteração fica no PostgreSQL e passa a valer nas páginas públicas sem novo build. A variável `NEXT_PUBLIC_GA_MEASUREMENT_ID` permanece opcional como fallback quando não houver configuração salva. O script do Google somente é carregado depois do consentimento do visitante, nunca é carregado em `/admin`, `/admin/login` ou prévias administrativas e também permanece desativado nas páginas públicas enquanto houver uma sessão administrativa autenticada.
 
-## 8. Configurar o domínio no Nginx
+## 8. Configurar domínio e proxy no CloudPanel
 
-Substitua o domínio e instale os arquivos:
+No CloudPanel, crie um site do tipo **Reverse Proxy** para o domínio canônico `academia.seudominio.br` e aponte-o para `http://127.0.0.1:3000`. Em seguida, abra o **Vhost Editor** desse site e use `nginx/academia.conf.example` como referência, substituindo os domínios de exemplo.
 
-```bash
-cd /opt/academia/app
-sed 's/academia\.exemplo\.br/academia.seudominio.br/g; s/www\.academia\.exemplo\.br/www.academia.seudominio.br/g' nginx/academia.conf.example > /tmp/academia.conf
-sudo cp nginx/00-connection-upgrade.conf /etc/nginx/conf.d/00-connection-upgrade.conf
-sudo cp /tmp/academia.conf /etc/nginx/sites-available/academia
-sudo ln -sfn /etc/nginx/sites-available/academia /etc/nginx/sites-enabled/academia
-sudo rm -f /etc/nginx/sites-enabled/default
-sudo nginx -t
-sudo systemctl reload nginx
-```
+Não substitua cegamente o vhost inteiro: preserve as diretivas `listen`, SSL, certificado e logs geradas pelo CloudPanel. O resultado deve separar duas responsabilidades:
+
+1. `www.academia.seudominio.br` responde somente com `308 https://academia.seudominio.br$request_uri`;
+2. apenas `academia.seudominio.br` possui `proxy_pass http://127.0.0.1:3000`.
+
+O uso de `$request_uri` preserva caminho e query string. Assim, `https://www.academia.seudominio.br/caminho?x=1` deve responder com `Location: https://academia.seudominio.br/caminho?x=1`, e somente a nova requisição canônica chega à aplicação.
+
+As diretivas `limit_req_zone` no início do exemplo e o `map` de `nginx/00-connection-upgrade.conf` pertencem ao contexto global `http`; não os cole dentro de `server` ou `location`. Se o template do CloudPanel já oferecer suporte a WebSocket, preserve a configuração gerada. Caso as zonas de limite ainda não existam na configuração global administrada pelo servidor, configure-as nessa área antes de manter os respectivos `limit_req` no vhost.
 
 O Nginx aceita corpos de até **21 MiB**. A aplicação mantém o limite efetivo do arquivo PDF em **20 MiB** e valida tanto o tipo declarado quanto a assinatura `%PDF-`; o 1 MiB adicional serve apenas para acomodar os metadados do formulário multipart. Assim, um PDF válido no limite anunciado não é recusado antecipadamente pelo proxy. O limite também permanece compatível com o proxy opcional da Cloudflare no plano gratuito.
 
 O arquivo também limita login, contato, comentários e registro de visualizações no proxy. A aplicação mantém uma segunda proteção para esses endpoints públicos. Esse limitador interno usa memória e é adequado ao serviço `app` único definido neste Compose; seus contadores são reiniciados junto com o processo. Antes de executar múltiplas réplicas, configure um limitador compartilhado em PostgreSQL/Redis ou no proxy. A Cloudflare pode acrescentar proteção, mas não é requisito para esses controles.
 
-O Nginx sobrescreve `Host`, `X-Real-IP`, `X-Forwarded-For`, `X-Forwarded-Host` e `X-Forwarded-Proto` antes de encaminhar cada requisição, além de remover `CF-Connecting-IP` do tráfego entregue à aplicação. A aplicação usa somente o `X-Real-IP` produzido pelo Nginx para limitação interna e compara mutações com a origem canônica de `NEXT_PUBLIC_SITE_URL`; portanto, não confie em uma configuração própria que apenas repasse esses cabeçalhos recebidos do visitante. A porta `3000` deve continuar acessível exclusivamente por `127.0.0.1`.
+No domínio canônico, o Nginx sobrescreve `Host`, `X-Real-IP`, `X-Forwarded-For`, `X-Forwarded-Host` e `X-Forwarded-Proto` antes de encaminhar cada requisição. A aplicação usa somente o `X-Real-IP` produzido pelo Nginx para limitação interna e compara mutações com a origem canônica de `NEXT_PUBLIC_SITE_URL`; portanto, não configure o proxy para apenas repassar cabeçalhos recebidos do visitante. A porta `3000` deve continuar acessível exclusivamente por `127.0.0.1`.
+
+`NEXT_PUBLIC_SITE_URL` deve conter apenas `https://academia.seudominio.br`. O domínio `www` nunca deve chegar ao Next.js: ele é redirecionado pelo CloudPanel/Nginx antes do proxy.
 
 Em produção, a aplicação envia uma Política de Segurança de Conteúdo efetiva. Scripts não podem usar `eval`, manipuladores JavaScript em atributos HTML são bloqueados e imagens editoriais persistidas ficam restritas ao próprio site e aos dados locais usados pelo editor. URLs externas de imagens são removidas ao salvar o artigo; o arquivo deve ser enviado ao site para gerar as variantes WebP persistentes. Links bibliográficos externos continuam permitidos. O carregamento externo permitido limita-se ao Google Analytics consentido e aos domínios de vídeo previstos.
 
@@ -214,30 +223,25 @@ dig +short AAAA academia.seudominio.br
 
 Os endereços retornados precisam apontar para a VPS antes de solicitar SSL.
 
-## 10. Testar Nginx em HTTP
+## 10. Testar domínio e redirect
 
 ```bash
-sudo nginx -t
-curl -I http://academia.seudominio.br
-sudo tail -n 100 /var/log/nginx/academia.error.log
+curl -fsSI https://academia.seudominio.br/api/health
+curl -fsSI 'https://www.academia.seudominio.br/caminho?x=1'
 ```
+
+A segunda resposta deve ter status `308` e exatamente `Location: https://academia.seudominio.br/caminho?x=1`. Confirme no Vhost Editor que o CloudPanel aceitou a configuração; ele valida a sintaxe antes de salvá-la.
 
 ## 11. Configurar SSL/HTTPS
 
-Instale Certbot pelo snap, conforme recomendação oficial:
+Em **SSL/TLS** no CloudPanel, emita ou importe um certificado que cubra `academia.seudominio.br` e `www.academia.seudominio.br`. O CloudPanel permanece responsável pela instalação e renovação; não execute Certbot manualmente nem substitua suas diretivas de certificado no Vhost Editor.
 
-```bash
-sudo snap install --classic certbot
-sudo ln -sfn /snap/bin/certbot /usr/local/bin/certbot
-sudo certbot --nginx -d academia.seudominio.br -d www.academia.seudominio.br --redirect --hsts --staple-ocsp
-sudo certbot renew --dry-run
-systemctl list-timers | grep certbot
-```
-
-Se não usar `www`, retire o segundo `-d` e remova esse nome do `server_name`. Confirme:
+Confirme domínio canônico, redirect e saúde:
 
 ```bash
 curl -fsSI https://academia.seudominio.br
+curl -fsSI https://www.academia.seudominio.br
+curl -fsS https://academia.seudominio.br/api/health
 ```
 
 ### 11.1. Cloudflare Free (opcional)
@@ -286,20 +290,9 @@ Para uma limpeza manual emergencial, use **Caching > Configuration > Purge Cache
 
 #### IP real do visitante no Nginx
 
-Sem esta etapa, o Nginx enxerga o IP do proxy da Cloudflare. A lista deve vir dos endereços oficiais da Cloudflare e só deve ser instalada se o proxy estiver em uso:
+Sem configuração adicional, o Nginx pode enxergar o IP do proxy externo em vez do visitante. Isso não impede DNS, SSL, redirect ou funcionamento da aplicação, mas afeta logs e limites por endereço.
 
-```bash
-CF_REAL_IP_FILE="$(mktemp)"
-curl -fsS https://www.cloudflare.com/ips-v4 | sed 's/^/set_real_ip_from /; s/$/;/' > "$CF_REAL_IP_FILE"
-curl -fsS https://www.cloudflare.com/ips-v6 | sed 's/^/set_real_ip_from /; s/$/;/' >> "$CF_REAL_IP_FILE"
-printf '%s\n' 'real_ip_header CF-Connecting-IP;' 'real_ip_recursive on;' >> "$CF_REAL_IP_FILE"
-sudo install -m 0644 "$CF_REAL_IP_FILE" /etc/nginx/conf.d/cloudflare-real-ip.conf
-rm -f "$CF_REAL_IP_FILE"
-sudo nginx -t
-sudo systemctl reload nginx
-```
-
-Atualize esse arquivo quando a Cloudflare alterar suas faixas oficiais. Não aceite `CF-Connecting-IP` de qualquer origem sem restringir `set_real_ip_from`. O módulo `real_ip` converte o endereço validado em `$remote_addr`; em seguida, a configuração do site grava esse valor em `X-Real-IP` e remove o cabeçalho original antes de encaminhar a requisição. A referência é [Restoring original visitor IPs](https://developers.cloudflare.com/support/troubleshooting/restoring-visitor-ips/restoring-original-visitor-ips/).
+Se a Cloudflare estiver ativa, a confiança em `CF-Connecting-IP` pertence exclusivamente à infraestrutura global do Nginx/CloudPanel, fora do vhost e do código da aplicação. Configure `set_real_ip_from` apenas para as faixas oficiais da Cloudflare, seguido de `real_ip_header CF-Connecting-IP` e `real_ip_recursive on`. Não implemente essas diretivas dentro do vhost do projeto e nunca confie nesse cabeçalho sem restringir previamente as origens. A referência é [Restoring original visitor IPs](https://developers.cloudflare.com/support/troubleshooting/restoring-visitor-ips/restoring-original-visitor-ips/).
 
 Valide a política sem expor credenciais:
 
@@ -431,7 +424,7 @@ CONFIRM_RESTORE=RESTAURAR ./scripts/restore.sh /var/backups/academia-migracao/AA
 curl -fsS http://127.0.0.1:3000/api/health
 ```
 
-7. Configure Nginx/SSL na nova VPS, altere A/AAAA para o novo IP e valide o site.
+7. Configure domínio, proxy e SSL no CloudPanel da nova VPS, altere A/AAAA para o novo IP e valide o site.
 8. Mantenha a VPS antiga desligada para escrita, mas disponível para reversão, por alguns dias. Depois eleve novamente o TTL.
 
 ## Recursos mínimos sugeridos
@@ -457,8 +450,9 @@ curl -fsS http://127.0.0.1:3000/api/health
 - [ ] A inicialização rejeita configuração inválida (`docker compose run --rm --no-deps app node scripts/start-production.mjs --validate-only`).
 - [ ] `docker compose ps` mostra `db` e `app` saudáveis.
 - [ ] Migrações aparecem como aplicadas.
-- [ ] Nginx passa em `sudo nginx -t`.
-- [ ] HTTPS responde e `certbot renew --dry-run` passa.
+- [ ] O CloudPanel aceita e salva o vhost sem erro de sintaxe.
+- [ ] HTTPS responde com certificado válido para o domínio canônico e para `www`.
+- [ ] `www` responde com `308` para o domínio canônico, preservando caminho e query string.
 - [ ] A resposta HTTPS contém `Content-Security-Policy`, sem `unsafe-eval`, e não apresenta violações no console nas páginas públicas ou administrativas.
 - [ ] Login administrativo funciona.
 - [ ] Publicação de artigo, notas de rodapé e persistência após reinício foram testadas.

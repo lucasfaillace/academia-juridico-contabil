@@ -42,13 +42,18 @@ unset ADMIN_PASSWORD_INPUT admin_password admin_password_confirmation
 tmp_file="$(mktemp)"
 trap 'rm -f "$tmp_file"' EXIT HUP INT TERM
 awk -v email="$admin_email" -v hash="$admin_hash" '
+  function quoted_env_hash(value, escaped) {
+    escaped=value
+    gsub(/\$/, "\\$", escaped)
+    return "\"" escaped "\""
+  }
   BEGIN { seen_email=0; seen_hash=0 }
   /^ADMIN_EMAIL=/ { print "ADMIN_EMAIL=" email; seen_email=1; next }
-  /^ADMIN_PASSWORD_HASH=/ { print "ADMIN_PASSWORD_HASH=\047" hash "\047"; seen_hash=1; next }
+  /^ADMIN_PASSWORD_HASH=/ { print "ADMIN_PASSWORD_HASH=" quoted_env_hash(hash); seen_hash=1; next }
   { print }
   END {
     if (!seen_email) print "ADMIN_EMAIL=" email
-    if (!seen_hash) print "ADMIN_PASSWORD_HASH=\047" hash "\047"
+    if (!seen_hash) print "ADMIN_PASSWORD_HASH=" quoted_env_hash(hash)
   }
 ' "$env_file" > "$tmp_file"
 mv "$tmp_file" "$env_file"

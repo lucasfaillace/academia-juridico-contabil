@@ -1,13 +1,31 @@
-# Substitua academia.exemplo.br e www.academia.exemplo.br antes de instalar.
+# Referência para o Vhost Editor do CloudPanel.
+# Substitua academia.exemplo.br e www.academia.exemplo.br pelo domínio real.
+# Preserve no vhost as diretivas listen, SSL e logs geradas pelo CloudPanel.
+#
+# As quatro diretivas abaixo pertencem ao contexto http global do Nginx. Elas
+# não podem ser coladas dentro de server/location no Vhost Editor. Configure-as
+# uma única vez na área global do Nginx/CloudPanel antes de usar limit_req.
 limit_req_zone $binary_remote_addr zone=academia_contact:10m rate=10r/m;
 limit_req_zone $binary_remote_addr zone=academia_login:10m rate=10r/m;
 limit_req_zone $binary_remote_addr zone=academia_comments:10m rate=10r/m;
 limit_req_zone $binary_remote_addr zone=academia_views:10m rate=60r/m;
 
+# Vhost alternativo: não encaminha requisições ao Next.js. No CloudPanel,
+# mantenha também aqui as diretivas de HTTPS geradas para o certificado que
+# cobre www.academia.exemplo.br.
 server {
     listen 80;
     listen [::]:80;
-    server_name academia.exemplo.br www.academia.exemplo.br;
+    server_name www.academia.exemplo.br;
+
+    return 308 https://academia.exemplo.br$request_uri;
+}
+
+# Vhost canônico: este é o único que encaminha requisições ao Next.js.
+server {
+    listen 80;
+    listen [::]:80;
+    server_name academia.exemplo.br;
 
     # O arquivo PDF é limitado a 20 MiB pela aplicação; 1 MiB adicional
     # acomoda o envelope multipart sem ampliar o limite efetivo do arquivo.

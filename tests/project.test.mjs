@@ -1118,22 +1118,41 @@ test("pagina resumos administrativos, carrega conteúdo sob demanda e não recar
   assert.match(dashboard, /admin-pagination/);
 });
 
-test("endurece o Nginx e documenta a Cloudflare gratuita como opcional", async () => {
+test("separa domínio canônico, redirect www e proxy no CloudPanel", async () => {
   const [nginx, deployment, env, packageJson] = await Promise.all([
     readFile(new URL("nginx/academia.conf.example", root), "utf8"),
     readFile(new URL("DEPLOYMENT.md", root), "utf8"),
     readFile(new URL(".env.example", root), "utf8"),
     readFile(new URL("package.json", root), "utf8"),
   ]);
+  const wwwServer = nginx.match(/server \{[\s\S]*?server_name www\.academia\.exemplo\.br;[\s\S]*?\n\}/)?.[0];
+  assert.ok(wwwServer, "bloco exclusivo para www não encontrado");
+  assert.match(wwwServer, /return 308 https:\/\/academia\.exemplo\.br\$request_uri;/);
+  assert.doesNotMatch(wwwServer, /proxy_pass/);
   assert.match(nginx, /gzip on/);
+  assert.match(nginx, /server_name academia\.exemplo\.br;[\s\S]*proxy_pass http:\/\/127\.0\.0\.1:3000/);
+  assert.equal((nginx.match(/server_name www\.academia\.exemplo\.br;/g) || []).length, 1);
+  assert.doesNotMatch(nginx, /server_name academia\.exemplo\.br www\.academia\.exemplo\.br/);
   assert.match(nginx, /location = \/api\/auth\/login/);
+  assert.match(nginx, /proxy_set_header Host \$host/);
+  assert.match(nginx, /proxy_set_header X-Forwarded-Host \$host/);
+  assert.match(nginx, /proxy_set_header X-Forwarded-Proto \$scheme/);
   assert.match(nginx, /proxy_set_header X-Forwarded-For \$remote_addr/);
+  assert.match(nginx, /proxy_set_header X-Real-IP \$remote_addr/);
   assert.match(nginx, /location \/media\//);
+  assert.match(deployment, /Vhost Editor/);
+  assert.match(deployment, /308 https:\/\/academia\.seudominio\.br\$request_uri/);
+  assert.match(deployment, /Location: https:\/\/academia\.seudominio\.br\/caminho\?x=1/);
+  assert.match(deployment, /ufw allow 80\/tcp/);
+  assert.match(deployment, /ufw allow 443\/tcp/);
+  assert.doesNotMatch(deployment, /sites-available|sites-enabled|certbot --nginx|snap install --classic certbot|rm -f \/etc\/nginx\/sites-enabled\/default/);
   assert.match(deployment, /Cloudflare Free \(opcional\)/);
   assert.match(deployment, /Full \(strict\)/);
   assert.match(deployment, /Use cache-control header if present, bypass cache if not/);
   assert.match(deployment, /continua normalmente/);
   assert.match(deployment, /real_ip_header CF-Connecting-IP/);
+  assert.match(env, /origem pública canônica[\s\S]*sem www/iu);
+  assert.match(env, /NEXT_PUBLIC_SITE_URL=https:\/\/academia\.exemplo\.br/);
   assert.match(env, /CLOUDFLARE_CACHE_PURGE_ENABLED=false/);
   assert.doesNotMatch(packageJson, /cloudflare/i);
 });
