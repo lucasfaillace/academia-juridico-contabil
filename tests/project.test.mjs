@@ -16,7 +16,7 @@ test("usa a identidade e não mantém o preview inicial", async () => {
 });
 
 test("inclui controles de segurança e portabilidade", async () => {
-  const [compose, env, migration, articleApi, articleContentSecurity, imageApi, editor, articlePage, articleHtml, richContent, css, auth, login, nextConfig, cloudflareCache] = await Promise.all([
+  const [compose, env, migration, articleApi, articleContentSecurity, imageApi, editor, articlePage, articleHtml, richContent, css, auth, login, logout, nextConfig, cloudflareCache] = await Promise.all([
     readFile(new URL("docker-compose.yml", root), "utf8"), readFile(new URL(".env.example", root), "utf8"),
     readFile(new URL("migrations/001_initial.sql", root), "utf8"),
     readFile(new URL("app/api/articles/route.ts", root), "utf8"),
@@ -29,6 +29,7 @@ test("inclui controles de segurança e portabilidade", async () => {
     readFile(new URL("app/globals.css", root), "utf8"),
     readFile(new URL("lib/auth.ts", root), "utf8"),
     readFile(new URL("app/api/auth/login/route.ts", root), "utf8"),
+    readFile(new URL("app/api/auth/logout/route.ts", root), "utf8"),
     readFile(new URL("next.config.ts", root), "utf8"),
     readFile(new URL("lib/cloudflare-cache.ts", root), "utf8"),
   ]);
@@ -64,6 +65,9 @@ test("inclui controles de segurança e portabilidade", async () => {
   assert.match(auth, /AUTH_SECRET precisa conter pelo menos 32 caracteres/);
   assert.match(login, /consumeRateLimit/);
   assert.match(login, /isSameOriginMutation/);
+  assert.match(logout, /crossOriginMutationResponse/);
+  assert.match(logout, /process\.env\.NEXT_PUBLIC_SITE_URL/);
+  assert.match(logout, /NextResponse\.redirect\(new URL\("\/", publicUrl \|\| request\.url\)\)/);
   assert.match(articleContentSecurity, /allowedSchemes: \["http", "https", "mailto"\]/);
   assert.match(articlePage, /replace\(\/<\/g, "\\\\u003c"\)/);
   assert.match(nextConfig, /key: "Content-Security-Policy"/);
