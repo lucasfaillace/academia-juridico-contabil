@@ -1334,7 +1334,7 @@ export function AdminDashboard({
   return (
     <div className="admin-shell">
       <aside className="admin-sidebar">
-        <Image className="admin-sidebar-logo" src="/logo-academia-transparente.png" alt="Academia Jurídico-Contábil" width={1500} height={520} priority />
+        <Image className="admin-sidebar-logo" src="/logo-academia.svg" alt="Academia Jurídico-Contábil" width={410} height={142} priority />
         <nav aria-label="Área editorial">
           {nav.map(([id, label, Icon]) => (
             <button

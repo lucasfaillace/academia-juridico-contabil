@@ -8,7 +8,7 @@ test("usa a identidade e não mantém o preview inicial", async () => {
     readFile(new URL("app/page.tsx", root), "utf8"), readFile(new URL("app/layout.tsx", root), "utf8"),
     readFile(new URL("components/Header.tsx", root), "utf8"), readFile(new URL("package.json", root), "utf8"),
   ]);
-  assert.match(page, /Academia Jurídico-Contábil/); assert.match(header, /logo-academia\.png/);
+  assert.match(page, /Academia Jurídico-Contábil/); assert.match(header, /logo-academia\.svg/);
   assert.match(page, /profissionais do Direito e da Contabilidade/);
   assert.doesNotMatch(page, /Conteúdo técnico para profissionais do Direito\.<\/p>/);
   assert.match(layout, /profissionais das duas áreas/);
@@ -750,18 +750,27 @@ test("permite excluir artigos autenticados e mantém a exclusão na prévia", as
   assert.match(commentsStore, /deletePreviewCommentsForArticle/);
 });
 
-test("aplica a marca branca sem fundo no rodapé e no painel administrativo", async () => {
-  const [footer, dashboard, styles] = await Promise.all([
+test("usa o SVG compacto e aplica a marca branca sem fundo nas áreas escuras", async () => {
+  const [header, footer, dashboard, loginPage, styles, logo] = await Promise.all([
+    readFile(new URL("components/Header.tsx", root), "utf8"),
     readFile(new URL("components/Footer.tsx", root), "utf8"),
     readFile(new URL("components/AdminDashboard.tsx", root), "utf8"),
+    readFile(new URL("app/admin/login/page.tsx", root), "utf8"),
     readFile(new URL("app/globals.css", root), "utf8"),
+    readFile(new URL("public/logo-academia.svg", root), "utf8"),
   ]);
-  assert.match(footer, /logo-academia-transparente\.png/);
+  assert.match(header, /logo-academia\.svg[^>]*width=\{410\}[^>]*height=\{142\}/);
+  assert.match(footer, /logo-academia\.svg/);
   assert.match(dashboard, /admin-sidebar-logo/);
-  assert.match(dashboard, /logo-academia-transparente\.png/);
+  assert.match(dashboard, /logo-academia\.svg/);
+  assert.match(loginPage, /logo-academia\.svg/);
+  assert.match(logo, /width="410" height="142" viewBox="460 395 908 315"/);
+  assert.doesNotMatch(logo, /<(?:image|text|script|foreignObject)\b|data:image|xlink:href|font-family|display:\s*none/i);
   assert.match(styles, /\.footer-logo[^}]*filter:brightness\(0\) invert\(1\)/);
   assert.match(styles, /\.admin-sidebar-logo[^}]*filter:brightness\(0\) invert\(1\)/);
   assert.doesNotMatch(styles, /\.footer-logo[^}]*background:#fff/);
+  await assert.rejects(access(new URL("public/logo-academia.png", root)));
+  await assert.rejects(access(new URL("public/logo-academia-transparente.png", root)));
 });
 
 test("oferece atalho local para a prévia sem enfraquecer a autenticação de produção", async () => {
@@ -959,6 +968,44 @@ test("mantém o sumário logo após o resumo e com largura contida", async () =>
   assert.match(styles, /\.article-inline-toc\s*\{[^}]*width:fit-content[^}]*max-width:100%/);
   assert.match(styles, /\.article-content blockquote p \{ margin:0; \}/);
   assert.doesNotMatch(styles, /\.article-inline-toc\s*\{[^}]*min-width/);
+});
+
+test("preserva o título original e amplia a tipografia editorial pública na mesma proporção", async () => {
+  const styles = await readFile(new URL("app/globals.css", root), "utf8");
+  assert.match(styles, /\.publication-reference\s*\{[^}]*font-size:1\.25rem/);
+  assert.match(styles, /\.article-hero h1\s*\{[^}]*font-size:clamp\(1\.85rem,3\.3vw,2\.65rem\)/);
+  assert.match(styles, /\.article-subtitle\s*\{[^}]*font-size:1\.35rem/);
+  assert.match(styles, /\.article-content\s*\{[^}]*font-size:1\.25rem[^}]*line-height:1\.68/);
+  assert.match(styles, /\.article-content h1,\.article-content h2\s*\{[^}]*font-size:1\.8125rem/);
+  assert.match(styles, /\.article-content h3\s*\{[^}]*font-size:1\.475rem/);
+  assert.match(styles, /\.article-abstract\s*\{[^}]*font-size:1\.1375rem/);
+  assert.match(styles, /\.article-inline-toc\s*\{[^}]*font-size:1\.05rem/);
+  assert.match(styles, /\.footnotes\s*\{[^}]*font-size:1rem[^}]*line-height:1\.55/);
+  assert.match(styles, /\.article-references li\s*\{[^}]*font-size:\.975rem/);
+  assert.match(styles, /\.article-video-callout strong\s*\{[^}]*font-size:1\.125rem/);
+  assert.match(styles, /\.article-video-callout p\s*\{[^}]*font-size:\.95rem/);
+  assert.match(styles, /\.article-video-callout a\s*\{[^}]*font-size:\.95rem/);
+  assert.match(styles, /\.article-content \.comments-heading h2\s*\{[^}]*font-size:1\.3125rem/);
+  assert.match(styles, /\.comment-item>article>p\s*\{[^}]*font-size:1\.025rem[^}]*line-height:1\.55/);
+  assert.match(styles, /\.preview-comments \.comment-form p\s*\{[^}]*font-size:\.9375rem/);
+});
+
+test("amplia proporcionalmente a tipografia da página sobre sem alterar o título principal", async () => {
+  const [aboutPage, styles] = await Promise.all([
+    readFile(new URL("app/sobre/page.tsx", root), "utf8"),
+    readFile(new URL("app/globals.css", root), "utf8"),
+  ]);
+  assert.match(aboutPage, /className="page-hero compact about-hero"/);
+  assert.match(styles, /\.about-hero p:last-child\s*\{[^}]*font-size:1\.25rem/);
+  assert.doesNotMatch(styles, /\.about-hero h1\s*\{/);
+  assert.match(styles, /\.academy-index \.eyebrow\s*\{[^}]*font-size:\.875rem/);
+  assert.match(styles, /\.academy-index a\s*\{[^}]*font-size:1\.05rem/);
+  assert.match(styles, /\.academy-prose h2\s*\{[^}]*font-size:clamp\(1\.9375rem,3\.125vw,2\.6875rem\)/);
+  assert.match(styles, /\.academy-prose>p\s*\{[^}]*font-size:1\.3125rem[^}]*line-height:1\.72/);
+  assert.match(styles, /\.founder-content>p:not\(\.eyebrow\)\s*\{[^}]*font-size:1\.25rem/);
+  assert.match(styles, /\.founder-role\s*\{[^}]*font-size:1\.05rem!important/);
+  assert.match(styles, /\.profile-links strong\s*\{[^}]*font-size:1\.025rem/);
+  assert.match(styles, /\.profile-links small\s*\{[^}]*font-size:\.8375rem/);
 });
 
 test("organiza a edição do artigo em painéis recolhíveis sem mover as ações editoriais", async () => {

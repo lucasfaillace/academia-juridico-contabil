@@ -29,7 +29,7 @@ export function Header() {
       <a className="skip-link" href="#conteudo">Ir para o conteúdo</a>
       <div className="container header-inner">
         <Link href="/" className="brand" aria-label="Academia Jurídico-Contábil — início">
-          <Image src="/logo-academia.png" alt="Academia Jurídico-Contábil" width={1500} height={520} priority />
+          <Image src="/logo-academia.svg" alt="Academia Jurídico-Contábil" width={410} height={142} priority />
         </Link>
         <button
           className="menu-button"

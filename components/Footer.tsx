@@ -6,7 +6,7 @@ export function Footer() {
     <footer className="site-footer">
       <div className="container footer-grid">
         <div>
-          <Image className="footer-logo" src="/logo-academia-transparente.png" alt="Academia Jurídico-Contábil" width={1500} height={520} />
+          <Image className="footer-logo" src="/logo-academia.svg" alt="Academia Jurídico-Contábil" width={410} height={142} />
           <p>Artigos e cursos sobre Direito, Contabilidade e suas interfaces.</p>
         </div>
         <div>

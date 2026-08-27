@@ -29,7 +29,7 @@ const profileLinks = [
 export default function AboutPage() {
   return (
     <PageShell>
-      <section className="page-hero compact">
+      <section className="page-hero compact about-hero">
         <div className="container narrow">
           <p className="eyebrow">Institucional</p>
           <h1>A Academia</h1>
