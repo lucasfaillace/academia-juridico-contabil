@@ -947,16 +947,20 @@ test("pagina referências, carrega detalhes sob demanda e agrega visualizações
 });
 
 test("oferece prévia privada de rascunhos no mesmo layout público", async () => {
-  const [dashboard, adminPage, previewPage, articleView, repository, previewStore] = await Promise.all([
+  const [dashboard, adminPage, previewPage, articleView, repository, previewStore, previewRoute, previewMigration] = await Promise.all([
     readFile(new URL("components/AdminDashboard.tsx", root), "utf8"),
     readFile(new URL("app/admin/page.tsx", root), "utf8"),
     readFile(new URL("app/admin/preview/[slug]/page.tsx", root), "utf8"),
     readFile(new URL("components/ArticlePageView.tsx", root), "utf8"),
     readFile(new URL("lib/repository.ts", root), "utf8"),
     readFile(new URL("lib/preview-store.ts", root), "utf8"),
+    readFile(new URL("app/api/admin/articles/preview/route.ts", root), "utf8"),
+    readFile(new URL("migrations/022_article_preview_snapshots.sql", root), "utf8"),
   ]);
   assert.match(dashboard, /Prévia privada/);
-  assert.match(dashboard, /\/admin\/preview\//);
+  assert.match(dashboard, /\/api\/admin\/articles\/preview/);
+  assert.match(dashboard, /window\.open\("about:blank", "academia-private-article-preview"\)/);
+  assert.match(dashboard, /previewWindow\.location\.replace\(`\/admin\/preview\/\$\{encodeURIComponent\(data\.slug\)\}\?v=\$\{Date\.now\(\)\}`\)/);
   assert.match(dashboard, /initialArticleSlug/);
   assert.match(dashboard, /history\.replaceState/);
   assert.match(adminPage, /searchParams/);
@@ -971,7 +975,14 @@ test("oferece prévia privada de rascunhos no mesmo layout público", async () =
   assert.match(articleView, /A área de comentários será habilitada/);
   assert.match(articleView, /\/admin\?edit=/);
   assert.match(repository, /getArticleForAdminPreview/);
-  assert.match(previewStore, /getPreviewArticle/);
+  assert.match(repository, /article_preview_snapshots/);
+  assert.match(previewStore, /getArticlePreviewSnapshot/);
+  assert.match(previewRoute, /crossOriginMutationResponse/);
+  assert.match(previewRoute, /verifySession/);
+  assert.match(previewRoute, /sanitizeArticleContent/);
+  assert.match(previewRoute, /INSERT INTO article_preview_snapshots/);
+  assert.match(previewMigration, /article_id uuid PRIMARY KEY REFERENCES articles\(id\) ON DELETE CASCADE/);
+  assert.match(previewMigration, /snapshot jsonb NOT NULL/);
 });
 
 test("mantém o sumário logo após o resumo e com largura contida", async () => {
@@ -988,6 +999,9 @@ test("mantém o sumário logo após o resumo e com largura contida", async () =>
 
 test("preserva o título original e amplia a tipografia editorial pública na mesma proporção", async () => {
   const styles = await readFile(new URL("app/globals.css", root), "utf8");
+  assert.doesNotMatch(styles, /text-wrap:balance/);
+  assert.match(styles, /h1,h2,h3\s*\{[^}]*font-weight:400/);
+  assert.match(styles, /h1\s*\{[^}]*font-size:clamp\(2rem,4vw,3\.1rem\)[^}]*font-weight:700/);
   assert.match(styles, /\.blog-tools\s*\{[^}]*max-width:1080px/);
   assert.match(styles, /\.reading-width\s*\{[^}]*max-width:860px/);
   assert.match(styles, /\.article-layout\s*\{[^}]*max-width:860px/);
@@ -996,8 +1010,8 @@ test("preserva o título original e amplia a tipografia editorial pública na me
   assert.match(styles, /\.article-subtitle\s*\{[^}]*font-size:1\.35rem/);
   assert.match(styles, /\.article-content\s*\{[^}]*font-size:1\.25rem[^}]*line-height:1\.68/);
   assert.match(styles, /\.article-content h1\s*\{[^}]*font-size:1\.8125rem[^}]*font-weight:700/);
-  assert.match(styles, /\.article-content h2\s*\{[^}]*font-size:1\.8125rem[^}]*font-weight:500/);
-  assert.match(styles, /\.article-content h3\s*\{[^}]*font-size:1\.5625rem/);
+  assert.match(styles, /\.article-content h2\s*\{[^}]*font-size:1\.8125rem[^}]*font-weight:400/);
+  assert.match(styles, /\.article-content h3\s*\{[^}]*font-size:1\.5625rem[^}]*font-weight:400/);
   assert.match(styles, /\.article-content h4\s*\{[^}]*color:var\(--blue-950\)[^}]*font-size:1\.375rem[^}]*font-weight:500/);
   assert.match(styles, /\.ProseMirror h4\s*\{[^}]*color:var\(--blue-950\)[^}]*font-size:1rem[^}]*font-weight:500/);
   assert.match(styles, /\.article-content blockquote\s*\{[^}]*font-size:1\.25rem/);
@@ -1066,7 +1080,7 @@ test("organiza a edição do artigo em painéis recolhíveis sem mover as açõe
   assert.match(dashboard, /editArticle\(article, usage\.footnoteId\)/);
   assert.match(editor, /focusFootnote/);
   assert.match(editor, /editor-footnote-\$\{focusFootnote\.id\}/);
-  assert.match(dashboard, /draftAutosaveDelay = 1800/);
+  assert.match(dashboard, /draftAutosaveDelay = 60_000/);
   assert.match(dashboard, /editingStatus !== "draft"/);
   assert.match(dashboard, /title\.trim\(\)\.length < 3/);
   assert.match(dashboard, /save\("draft", \{ automatic: true \}\)/);

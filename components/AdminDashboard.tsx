@@ -95,7 +95,7 @@ type ReferenceFichamento = {
 };
 
 const emptyContent = "<p></p>";
-const draftAutosaveDelay = 1800;
+const draftAutosaveDelay = 60_000;
 
 function articleDraftFingerprint(input: {
   title: string;
@@ -212,6 +212,7 @@ export function AdminDashboard({
   const [editingStatus, setEditingStatus] = useState<AdminArticle["status"]>("draft");
   const [focusedFootnote, setFocusedFootnote] = useState<{ id: string; requestId: string }>();
   const [saving, setSaving] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
   const [notice, setNotice] = useState("");
   const [autosaveStatus, setAutosaveStatus] = useState<"idle" | "pending" | "saving" | "saved" | "error">("idle");
   const [lastSavedDraft, setLastSavedDraft] = useState("");
@@ -665,6 +666,48 @@ export function AdminDashboard({
     title,
     youtubeUrl,
   ]);
+
+  async function openPrivatePreview() {
+    if (!originalSlug || previewing) return;
+    const previewWindow = window.open("about:blank", "academia-private-article-preview");
+    if (!previewWindow) {
+      setNotice("Permita pop-ups para abrir a prévia privada.");
+      return;
+    }
+    previewWindow.opener = null;
+    previewWindow.document.title = "Preparando prévia…";
+    previewWindow.document.body.textContent = "Preparando prévia privada…";
+    setPreviewing(true);
+    setNotice("");
+    try {
+      const response = await fetch("/api/admin/articles/preview", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          originalSlug,
+          title: title.trim(),
+          summary,
+          youtubeUrl,
+          category,
+          authors: authors.map((name) => name.trim()).filter(Boolean),
+          tagSlugs: selectedTagSlugs,
+          content: html,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        previewWindow.close();
+        setNotice(data.error || "Não foi possível preparar a prévia.");
+        return;
+      }
+      previewWindow.location.replace(`/admin/preview/${encodeURIComponent(data.slug)}?v=${Date.now()}`);
+    } catch {
+      previewWindow.close();
+      setNotice("Não foi possível preparar a prévia.");
+    } finally {
+      setPreviewing(false);
+    }
+  }
 
   useEffect(() => {
     if (tab !== "editor" || editingStatus !== "draft" || saving) return;
@@ -1526,14 +1569,9 @@ export function AdminDashboard({
               <div><p className="eyebrow">Edição</p><h1>{originalSlug ? "Editar artigo" : "Novo artigo"}</h1></div>
               <div className="editor-actions">
                 {originalSlug && (
-                  <a
-                    className="button secondary"
-                    href={`/admin/preview/${encodeURIComponent(originalSlug)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <Eye size={16} aria-hidden="true" />Prévia privada
-                  </a>
+                  <button className="button secondary" disabled={saving || previewing} onClick={() => void openPrivatePreview()}>
+                    <Eye size={16} aria-hidden="true" />{previewing ? "Preparando prévia…" : "Prévia privada"}
+                  </button>
                 )}
                 <button className="button secondary" disabled={saving} onClick={() => void save("draft")}>
                   {editingStatus === "published" ? "Mover para rascunho" : "Salvar rascunho"}

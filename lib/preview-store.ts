@@ -26,6 +26,7 @@ export function usesFileContentFallback() {
 }
 
 const previewArticlesFilename = "articles.json";
+const articlePreviewSnapshotsFilename = "article-preview-snapshots.json";
 const previewDeletedArticlesFilename = "deleted-articles.json";
 const legacyPreviewArticlesPath = "/tmp/academia-preview-articles.json";
 const legacyPreviewDeletedArticlesPath = "/tmp/academia-preview-deleted-articles.json";
@@ -67,6 +68,33 @@ async function readDeletedSlugs() {
 
 async function writeDeletedSlugs(slugs: Set<string>) {
   await writePreviewDataFile(previewDeletedArticlesFilename, `${JSON.stringify(Array.from(slugs).sort(), null, 2)}\n`);
+}
+
+async function readArticlePreviewSnapshots() {
+  try {
+    const snapshots = JSON.parse(await readPreviewDataFile(articlePreviewSnapshotsFilename)) as unknown;
+    return Array.isArray(snapshots) ? snapshots as Article[] : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function saveArticlePreviewSnapshot(article: Article) {
+  const snapshots = (await readArticlePreviewSnapshots()).filter((snapshot) => snapshot.slug !== article.slug);
+  snapshots.push(article);
+  await writePreviewDataFile(articlePreviewSnapshotsFilename, `${JSON.stringify(snapshots, null, 2)}\n`);
+}
+
+export async function getArticlePreviewSnapshot(slug: string) {
+  return (await readArticlePreviewSnapshots()).find((snapshot) => snapshot.slug === slug);
+}
+
+export async function deleteArticlePreviewSnapshot(slug: string) {
+  const snapshots = await readArticlePreviewSnapshots();
+  const remaining = snapshots.filter((snapshot) => snapshot.slug !== slug);
+  if (remaining.length !== snapshots.length) {
+    await writePreviewDataFile(articlePreviewSnapshotsFilename, `${JSON.stringify(remaining, null, 2)}\n`);
+  }
 }
 
 function fallbackRecords(): StoredArticle[] {

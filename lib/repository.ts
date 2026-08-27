@@ -1,7 +1,7 @@
 import "server-only";
 import { articles as fallbackArticles, formatAuthorNames, type Article } from "./content";
 import { getPool, hasDatabaseConfig } from "./db";
-import { getPreviewArticle, getPreviewPublishedArticles, usesFileContentFallback } from "./preview-store";
+import { getArticlePreviewSnapshot, getPreviewArticle, getPreviewPublishedArticles, usesFileContentFallback } from "./preview-store";
 import { legacyReferenceHtml } from "./reference-html";
 
 function readingTime(html: string) { const words = html.replace(/<[^>]+>/g, " ").trim().split(/\s+/).filter(Boolean).length; return `${Math.max(1, Math.ceil(words / 220))} min`; }
@@ -282,8 +282,19 @@ export async function getPublishedArticle(slug: string): Promise<Article | undef
 }
 
 export async function getArticleForAdminPreview(slug: string): Promise<Article | undefined> {
-  if (!hasDatabaseConfig() && usesFileContentFallback()) return getPreviewArticle(slug);
+  if (!hasDatabaseConfig() && usesFileContentFallback()) {
+    return (await getArticlePreviewSnapshot(slug)) || getPreviewArticle(slug);
+  }
   if (!hasDatabaseConfig()) return fallbackArticles.find((article) => article.slug === slug);
+  const snapshotResult = await getPool().query(
+    `SELECT preview.snapshot
+     FROM article_preview_snapshots preview
+     JOIN articles article ON article.id=preview.article_id
+     WHERE article.slug=$1
+     LIMIT 1`,
+    [slug],
+  );
+  if (snapshotResult.rows[0]?.snapshot) return snapshotResult.rows[0].snapshot as Article;
   const result = await getPool().query(`${articleSelect} WHERE a.slug=$1 LIMIT 1`, [slug]);
   return result.rows[0] ? mapArticleRow(result.rows[0]) : undefined;
 }

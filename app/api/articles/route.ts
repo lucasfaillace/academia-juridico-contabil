@@ -8,7 +8,7 @@ import { verifySession } from "@/lib/auth";
 import { extractFootnoteReferenceLinks } from "@/lib/bibliographic-references";
 import { deletePreviewCommentsForArticle } from "@/lib/comment-store";
 import { getPool, hasDatabaseConfig } from "@/lib/db";
-import { deleteStoredArticle, listStoredArticles, saveStoredArticle, usesFileContentFallback } from "@/lib/preview-store";
+import { deleteArticlePreviewSnapshot, deleteStoredArticle, listStoredArticles, saveStoredArticle, usesFileContentFallback } from "@/lib/preview-store";
 import { listPreviewTags } from "@/lib/tag-store";
 import { crossOriginMutationResponse } from "@/lib/request-security";
 import { purgeOptionalCloudflareCache } from "@/lib/cloudflare-cache";
@@ -273,6 +273,8 @@ export async function POST(request: Request) {
       tags: selectedTags,
       authors,
     });
+    await deleteArticlePreviewSnapshot(parsed.data.originalSlug || slug);
+    if (parsed.data.originalSlug && parsed.data.originalSlug !== slug) await deleteArticlePreviewSnapshot(slug);
     await invalidateArticlePages(slug, parsed.data.originalSlug);
     return NextResponse.json(article, { status: 201 });
   }
@@ -310,6 +312,7 @@ export async function POST(request: Request) {
       );
     }
     const articleId = result.rows[0].id;
+    await client.query("DELETE FROM article_preview_snapshots WHERE article_id=$1", [articleId]);
     await client.query("DELETE FROM article_tags WHERE article_id=$1", [articleId]);
     for (const [displayOrder, tagSlug] of parsed.data.tagSlugs.entries()) {
       const tagResult = await client.query("SELECT id FROM tags WHERE slug=$1", [tagSlug]);
@@ -346,6 +349,7 @@ export async function DELETE(request: Request) {
   if (!hasDatabaseConfig() && usesFileContentFallback()) {
     const deleted = await deleteStoredArticle(slug);
     if (!deleted) return NextResponse.json({ error: "Artigo não encontrado." }, { status: 404 });
+    await deleteArticlePreviewSnapshot(slug);
     await deletePreviewCommentsForArticle(slug);
     await invalidateArticlePages(slug);
     return NextResponse.json({ ok: true });
