@@ -982,11 +982,15 @@ test("mantém o sumário logo após o resumo e com largura contida", async () =>
 
 test("preserva o título original e amplia a tipografia editorial pública na mesma proporção", async () => {
   const styles = await readFile(new URL("app/globals.css", root), "utf8");
+  assert.match(styles, /\.blog-tools\s*\{[^}]*max-width:1080px/);
+  assert.match(styles, /\.reading-width\s*\{[^}]*max-width:860px/);
+  assert.match(styles, /\.article-layout\s*\{[^}]*max-width:860px/);
   assert.match(styles, /\.publication-reference\s*\{[^}]*font-size:1\.25rem/);
   assert.match(styles, /\.article-hero h1\s*\{[^}]*font-size:clamp\(1\.85rem,3\.3vw,2\.65rem\)[^}]*font-weight:700/);
   assert.match(styles, /\.article-subtitle\s*\{[^}]*font-size:1\.35rem/);
   assert.match(styles, /\.article-content\s*\{[^}]*font-size:1\.25rem[^}]*line-height:1\.68/);
-  assert.match(styles, /\.article-content h1,\.article-content h2\s*\{[^}]*font-size:1\.8125rem[^}]*font-weight:700/);
+  assert.match(styles, /\.article-content h1\s*\{[^}]*font-size:1\.8125rem[^}]*font-weight:700/);
+  assert.match(styles, /\.article-content h2\s*\{[^}]*font-size:1\.8125rem[^}]*font-weight:500/);
   assert.match(styles, /\.article-content h3\s*\{[^}]*font-size:1\.5625rem/);
   assert.match(styles, /\.article-content h4\s*\{[^}]*color:var\(--blue-950\)[^}]*font-size:1\.375rem[^}]*font-weight:500/);
   assert.match(styles, /\.ProseMirror h4\s*\{[^}]*color:var\(--blue-950\)[^}]*font-size:1rem[^}]*font-weight:500/);
