@@ -1030,7 +1030,7 @@ function stripGeneratedFootnotes(value: string) {
   const withoutReferences = value.replace(/<section class="article-references"[\s\S]*?<\/section>\s*$/i, "");
   const withoutFootnotes = withoutReferences.replace(/<section class="footnotes"[\s\S]*?<\/section>\s*$/i, "");
   return withoutFootnotes.replace(
-    /<h([23])([^>]*)>([\s\S]*?)<\/h\1>/gi,
+    /<h([234])([^>]*)>([\s\S]*?)<\/h\1>/gi,
     (_match, level: string, attributes: string, content: string) =>
       `<h${level}${attributes.replace(/\sdata-numbered-heading(?:=(?:"[^"]*"|'[^']*'|[^\s>]+))?/gi, "")}>${content.replace(/^(\s*(?:<(?:strong|em|span)[^>]*>)*)\d+(?:\.\d+)*\.\s*/i, "$1")}</h${level}>`,
   );
@@ -1573,6 +1573,7 @@ export function RichEditor({
       <div className="editor-toolbar" role="toolbar" aria-label="Formatação do artigo">
         {command("Intertítulo nível 1", activeEditor.isActive("heading", { level: 2 }), () => activeEditor.chain().focus().toggleHeading({ level: 2 }).run())}
         {command("Intertítulo nível 2", activeEditor.isActive("heading", { level: 3 }), () => activeEditor.chain().focus().toggleHeading({ level: 3 }).run())}
+        {command("Intertítulo nível 3", activeEditor.isActive("heading", { level: 4 }), () => activeEditor.chain().focus().toggleHeading({ level: 4 }).run())}
         {command("Negrito", activeEditor.isActive("bold"), () => activeEditor.chain().focus().toggleBold().run())}
         {command("Itálico", activeEditor.isActive("italic"), () => activeEditor.chain().focus().toggleItalic().run())}
         {command("Sublinhado", activeEditor.isActive("underline"), () => activeEditor.chain().focus().toggleUnderline().run())}

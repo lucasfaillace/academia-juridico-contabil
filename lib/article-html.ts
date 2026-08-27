@@ -11,7 +11,8 @@ import {
 
 type Heading = {
   id: string;
-  level: 2 | 3;
+  level: 2 | 3 | 4;
+  number: string;
   title: string;
 };
 
@@ -202,6 +203,7 @@ export function prepareArticleHtml(source: string, options: {
   const protectedFootnotes: string[] = [];
   let levelOne = 0;
   let levelTwo = 0;
+  let levelThree = 0;
   const renderedFootnotes = renderFootnotes(source, options.references || []);
   const sourceWithoutGeneratedReferences = source.replace(
     /<section[^>]*\bclass=(?:"[^"]*\barticle-references\b[^"]*"|'[^']*\barticle-references\b[^']*')[^>]*>[\s\S]*?<\/section>/gi,
@@ -218,21 +220,30 @@ export function prepareArticleHtml(source: string, options: {
     .replace(/<(\/?)h1(\s|>)/gi, "<$1h2$2");
 
   const withHeadingIds = normalized.replace(
-    /<h([23])([^>]*)>([\s\S]*?)<\/h\1>/gi,
+    /<h([234])([^>]*)>([\s\S]*?)<\/h\1>/gi,
     (_match, rawLevel: string, rawAttributes: string, innerHtml: string) => {
-      const level = Number(rawLevel) as 2 | 3;
+      const level = Number(rawLevel) as 2 | 3 | 4;
       const contentWithoutNumber = innerHtml.replace(/^(\s*(?:<(?:strong|em|span)[^>]*>)*)\d+(?:\.\d+)*\.\s*/i, "$1");
       const titleWithoutNumber = decodeEntities(sanitizeHtml(contentWithoutNumber, { allowedTags: [], allowedAttributes: {} })).trim();
       if (!titleWithoutNumber) return "";
       if (level === 2) {
         levelOne += 1;
         levelTwo = 0;
-      } else {
+        levelThree = 0;
+      } else if (level === 3) {
         if (levelOne === 0) levelOne = 1;
         levelTwo += 1;
+        levelThree = 0;
+      } else {
+        if (levelOne === 0) levelOne = 1;
+        if (levelTwo === 0) levelTwo = 1;
+        levelThree += 1;
       }
-      const number = level === 2 ? `${levelOne}.` : `${levelOne}.${levelTwo}.`;
-      const title = `${number} ${titleWithoutNumber}`;
+      const number = level === 2
+        ? `${levelOne}.`
+        : level === 3
+          ? `${levelOne}.${levelTwo}.`
+          : `${levelOne}.${levelTwo}.${levelThree}.`;
 
       const existingId = rawAttributes.match(/\sid=(?:"([^"]+)"|'([^']+)')/i)?.slice(1).find(Boolean);
       const baseId = existingId || slugifyHeading(titleWithoutNumber);
@@ -241,15 +252,15 @@ export function prepareArticleHtml(source: string, options: {
       const id = occurrence ? `${baseId}-${occurrence + 1}` : baseId;
       const attributesWithoutId = rawAttributes.replace(/\sid=(?:"[^"]*"|'[^']*')/gi, "");
 
-      headings.push({ id, level, title });
+      headings.push({ id, level, number, title: titleWithoutNumber });
       return `<h${level}${attributesWithoutId} id="${escapeHtml(id)}"><span class="heading-number">${number}</span> ${contentWithoutNumber}</h${level}>`;
     },
   );
 
   const toc = headings.length
     ? `<nav class="article-inline-toc" aria-label="Sumário do artigo"><p>Sumário</p><ul>${headings
-        .map(({ id, level, title }) => `<li data-level="${level}"><a href="#${escapeHtml(id)}">${escapeHtml(title)}</a></li>`)
-        .join("")}${protectedFootnotes.length ? '<li data-level="2" class="toc-special"><a href="#notas">Notas</a></li>' : ""}${options.hasVideo ? '<li data-level="2" class="toc-special"><a href="#video-explicativo">Vídeo explicativo</a></li>' : ""}${options.hasComments ? '<li data-level="2" class="toc-special"><a href="#comentarios">Comentários</a></li>' : ""}</ul></nav>`
+        .map(({ id, level, number, title }) => `<li data-level="${level}"><a href="#${escapeHtml(id)}"><span class="toc-number">${escapeHtml(number)}</span><span class="toc-title">${escapeHtml(title)}</span></a></li>`)
+        .join("")}${protectedFootnotes.length ? '<li data-level="2" class="toc-special"><a href="#notas"><span class="toc-title">Notas</span></a></li>' : ""}${options.hasVideo ? '<li data-level="2" class="toc-special"><a href="#video-explicativo"><span class="toc-title">Vídeo explicativo</span></a></li>' : ""}${options.hasComments ? '<li data-level="2" class="toc-special"><a href="#comentarios"><span class="toc-title">Comentários</span></a></li>' : ""}</ul></nav>`
     : "";
 
   const withTableOfContents = withHeadingIds.replace(

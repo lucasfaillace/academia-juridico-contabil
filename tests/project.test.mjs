@@ -55,7 +55,11 @@ test("inclui controles de segurança e portabilidade", async () => {
   assert.match(richContent, /event\.key === "Escape"/); assert.match(css, /article-image-lightbox/);
   assert.doesNotMatch(css, /figure\[data-image-display="wide"\]/);
   assert.match(articlePage, /article-video-callout/);
-  assert.match(editor, /Intertítulo nível 1/); assert.match(editor, /Intertítulo nível 2/);
+  assert.match(editor, /Intertítulo nível 1/); assert.match(editor, /Intertítulo nível 2/); assert.match(editor, /Intertítulo nível 3/);
+  assert.match(editor, /toggleHeading\(\{ level: 4 \}\)/);
+  assert.match(articleHtml, /level: 2 \| 3 \| 4/); assert.match(articleHtml, /<h\(\[234\]\)/);
+  assert.match(articleHtml, /`\$\{levelOne\}\.\$\{levelTwo\}\.\$\{levelThree\}\.`/);
+  assert.match(articleHtml, /class="toc-number"/); assert.match(articleHtml, /class="toc-title"/);
   assert.match(editor, /toggleBlockquote/); assert.match(editor, /onMouseDown/);
   assert.doesNotMatch(editor, /numberedHeading/); assert.match(articleHtml, /<ul>/);
   assert.doesNotMatch(articlePage, /<aside className="article-toc"/);
@@ -276,7 +280,10 @@ test("centraliza tags, modera comentários e renderiza fórmulas no editor", asy
   assert.match(repository, /selected_tag\.slug/);
   assert.match(styles, /\.footnote-number \{ font-variant-numeric:tabular-nums/);
   assert.match(styles, /scroll-padding-top:132px/);
-  assert.match(styles, /li\[data-level="3"\] \{ margin-left:1\.2em/);
+  assert.match(styles, /grid-template-columns:max-content max-content max-content minmax\(0,1fr\)/);
+  assert.match(styles, /li\[data-level="3"\] \.toc-number \{ grid-column:2; \}/);
+  assert.match(styles, /li\[data-level="4"\] \.toc-number \{ grid-column:3; \}/);
+  assert.match(styles, /li\.toc-special \.toc-title \{ grid-column:1\/-1; \}/);
   assert.match(styles, /tag-juridica[^}]*#eef4fc/);
   assert.match(styles, /tag-geral[^}]*#fff3e3/);
 });
@@ -690,6 +697,9 @@ test("exporta artigos para Word exclusivamente pelo painel autenticado", async (
   assert.match(dashboard, /\/api\/admin\/articles\/export-word/);
   assert.match(exporter, /w:footnoteReference/);
   assert.match(exporter, /data-article-formula/);
+  assert.match(exporter, /node\.name === "h4"/);
+  assert.match(exporter, /styleId="Heading3"/);
+  assert.match(exporter, /styleId="Formula"[\s\S]*?<w:sz w:val="22"/);
   assert.match(exporter, /data-article-image/);
   assert.match(exporter, /w:tblLayout w:type="fixed"/);
   assert.match(exporter, /article\.summary/);
@@ -973,11 +983,17 @@ test("mantém o sumário logo após o resumo e com largura contida", async () =>
 test("preserva o título original e amplia a tipografia editorial pública na mesma proporção", async () => {
   const styles = await readFile(new URL("app/globals.css", root), "utf8");
   assert.match(styles, /\.publication-reference\s*\{[^}]*font-size:1\.25rem/);
-  assert.match(styles, /\.article-hero h1\s*\{[^}]*font-size:clamp\(1\.85rem,3\.3vw,2\.65rem\)/);
+  assert.match(styles, /\.article-hero h1\s*\{[^}]*font-size:clamp\(1\.85rem,3\.3vw,2\.65rem\)[^}]*font-weight:700/);
   assert.match(styles, /\.article-subtitle\s*\{[^}]*font-size:1\.35rem/);
   assert.match(styles, /\.article-content\s*\{[^}]*font-size:1\.25rem[^}]*line-height:1\.68/);
-  assert.match(styles, /\.article-content h1,\.article-content h2\s*\{[^}]*font-size:1\.8125rem/);
-  assert.match(styles, /\.article-content h3\s*\{[^}]*font-size:1\.475rem/);
+  assert.match(styles, /\.article-content h1,\.article-content h2\s*\{[^}]*font-size:1\.8125rem[^}]*font-weight:700/);
+  assert.match(styles, /\.article-content h3\s*\{[^}]*font-size:1\.5625rem/);
+  assert.match(styles, /\.article-content h4\s*\{[^}]*color:var\(--blue-950\)[^}]*font-size:1\.375rem[^}]*font-weight:500/);
+  assert.match(styles, /\.ProseMirror h4\s*\{[^}]*color:var\(--blue-950\)[^}]*font-size:1rem[^}]*font-weight:500/);
+  assert.match(styles, /\.article-content blockquote\s*\{[^}]*font-size:1\.25rem/);
+  assert.match(styles, /\.ProseMirror blockquote\s*\{[^}]*font-size:1rem/);
+  assert.match(styles, /\.article-formula \.katex\s*\{[^}]*font-size:1em/);
+  assert.match(styles, /\.editor-formula-preview \.katex,\.formula-live-preview \.katex\s*\{[^}]*font-size:1em/);
   assert.match(styles, /\.article-abstract\s*\{[^}]*font-size:1\.1375rem/);
   assert.match(styles, /\.article-inline-toc\s*\{[^}]*font-size:1\.05rem/);
   assert.match(styles, /\.footnotes\s*\{[^}]*font-size:1rem[^}]*line-height:1\.55/);
