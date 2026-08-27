@@ -881,6 +881,12 @@ test("mantém limpeza de deduplicação fora do pageview e filtra o histórico e
   assert.match(dockerfile, /COPY --from=builder --chown=nextjs:nodejs \/app\/scripts \.\/scripts/);
 });
 
+test("entrega os arquivos públicos ao usuário não privilegiado do container", async () => {
+  const dockerfile = await readFile(new URL("Dockerfile", root), "utf8");
+  assert.match(dockerfile, /COPY --from=builder --chown=nextjs:nodejs \/app\/public \.\/public/);
+  assert.match(dockerfile, /USER nextjs/);
+});
+
 test("limita exportações, transmite o ZIP e pré-seleciona duplicatas por índice", async () => {
   const [references, articlesExport, exportData, referencesExport, fichamentosExport, migration, compose, deployment] = await Promise.all([
     readFile(new URL("app/api/references/route.ts", root), "utf8"),
