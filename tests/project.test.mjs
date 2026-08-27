@@ -584,6 +584,9 @@ test("mantém fichamentos privados vinculados às referências bibliográficas",
   assert.match(route, /INSERT INTO reference_fichamentos/);
   assert.match(route, /UPDATE reference_fichamentos/);
   assert.match(route, /DELETE FROM reference_fichamentos/);
+  assert.match(route, /SELECT rf\.id,/);
+  assert.match(route, /rf\.created_at::text AS "createdAt"/);
+  assert.match(route, /rf\.updated_at::text AS "updatedAt"/);
   assert.match(topicsMigration, /CREATE TABLE IF NOT EXISTS reference_fichamento_topics/);
   assert.match(topicsMigration, /CREATE TABLE IF NOT EXISTS reference_fichamento_topic_links/);
   assert.match(simplifiedKindsMigration, /SET kind='citacao'/);

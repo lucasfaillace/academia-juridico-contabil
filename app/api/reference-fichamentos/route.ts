@@ -197,14 +197,14 @@ export async function GET(request: Request) {
       }))));
     }
     const result = await getPool().query(
-      `SELECT id,
-              reference_id AS "referenceId",
-              literal_quote AS "literalQuote",
-              paraphrase,
-              location,
-              personal_note AS "personalNote",
-              created_at::text AS "createdAt",
-              updated_at::text AS "updatedAt",
+      `SELECT rf.id,
+              rf.reference_id AS "referenceId",
+              rf.literal_quote AS "literalQuote",
+              rf.paraphrase,
+              rf.location,
+              rf.personal_note AS "personalNote",
+              rf.created_at::text AS "createdAt",
+              rf.updated_at::text AS "updatedAt",
               COALESCE(
                 jsonb_agg(
                   jsonb_build_object(
