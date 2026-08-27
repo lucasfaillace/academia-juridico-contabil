@@ -14,7 +14,7 @@ export default function PrivacyPage() {
         <div className="container narrow">
           <p className="eyebrow">Privacidade e proteção de dados</p>
           <h1>Política de Privacidade e Cookies</h1>
-          <p>Última atualização: 9 de agosto de 2026.</p>
+          <p>Última atualização: 27 de agosto de 2026.</p>
         </div>
       </section>
 
@@ -49,8 +49,7 @@ export default function PrivacyPage() {
             </li>
             <li>
               <strong>Estatísticas de acesso:</strong> artigo visualizado, data e horário da visita,
-              páginas acessadas e informações técnicas fornecidas pelo navegador, quando o visitante
-              autorizar as estatísticas.
+              páginas acessadas e informações técnicas fornecidas pelo navegador nas áreas públicas.
             </li>
             <li>
               <strong>Registros técnicos:</strong> informações estritamente necessárias ao
@@ -83,21 +82,20 @@ export default function PrivacyPage() {
 
           <h2>5. Estatísticas, cookies e tecnologias semelhantes</h2>
           <p>
-            As estatísticas somente são ativadas depois que o visitante escolhe “Aceitar estatísticas”.
-            A recusa não impede o acesso aos artigos ou às demais áreas públicas. A escolha pode ser
-            revista a qualquer momento pelo botão “Preferências de privacidade”, disponível no rodapé.
+            Nas áreas públicas, as estatísticas são ativadas no início da navegação. O aviso de cookies
+            é informativo, e o botão “Fechar” controla somente a sua exibição. Sessões administrativas
+            autenticadas e páginas iniciadas por <code>/admin</code> não participam da medição.
           </p>
           <p>
-            O site mantém a preferência de consentimento no próprio navegador. Quando as estatísticas
-            são aceitas, utiliza um identificador próprio com validade de 24 horas para reduzir
+            O sistema interno utiliza um identificador próprio com validade de 24 horas para reduzir
             contagens repetidas. Esse identificador é transformado em código anonimizado no servidor,
             e a chave usada para deduplicação é eliminada após 48 horas. O sistema interno não armazena
             o endereço IP completo como dado de visualização do artigo.
           </p>
           <p>
-            O site também utiliza o Google Analytics 4, fornecido pelo Google, somente após o
-            consentimento. O serviço poderá tratar dados técnicos e de navegação conforme suas próprias
-            condições e políticas, inclusive em outros países. Sinais do Google e recursos de
+            O site também utiliza o Google Analytics 4, fornecido pelo Google, desde o início da
+            navegação pública. O serviço poderá tratar dados técnicos e de navegação conforme suas
+            próprias condições e políticas, inclusive em outros países. Sinais do Google e recursos de
             personalização de anúncios permanecem desativados na configuração do site. As estatísticas
             internas e as do Google Analytics adotam critérios diferentes e, por isso, podem apresentar
             resultados distintos.

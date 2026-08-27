@@ -4,10 +4,8 @@ import Script from "next/script";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
-export const analyticsConsentKey = "academia_analytics_consent";
-export const analyticsConsentEvent = "academia:analytics-consent";
-
-type Consent = "granted" | "denied" | null;
+const analyticsNoticeKey = "academia_analytics_notice_closed";
+const analyticsNoticeEvent = "academia:analytics-notice";
 
 declare global {
   interface Window {
@@ -16,69 +14,76 @@ declare global {
   }
 }
 
-function readConsent(): Consent {
-  const value = window.localStorage.getItem(analyticsConsentKey);
-  return value === "granted" || value === "denied" ? value : null;
+function readNoticeClosed() {
+  return window.localStorage.getItem(analyticsNoticeKey) === "closed";
 }
 
 export function AnalyticsConsent() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [consent, setConsent] = useState<Consent>(null);
+  const [noticeClosed, setNoticeClosed] = useState(true);
   const [ready, setReady] = useState(false);
   const [measurementId, setMeasurementId] = useState<string>();
   const analyticsAllowedPath = pathname !== "/admin" && !pathname.startsWith("/admin/");
 
   useEffect(() => {
-    const sync = () => setConsent(readConsent());
+    const sync = () => setNoticeClosed(readNoticeClosed());
     sync();
-    window.addEventListener(analyticsConsentEvent, sync);
-    return () => window.removeEventListener(analyticsConsentEvent, sync);
+    window.addEventListener(analyticsNoticeEvent, sync);
+    return () => window.removeEventListener(analyticsNoticeEvent, sync);
   }, []);
 
   useEffect(() => {
-    if (consent !== "granted" || !analyticsAllowedPath) return;
+    if (!analyticsAllowedPath) return;
     let active = true;
     void fetch("/api/analytics/config", { cache: "no-store" })
       .then(async (response) => response.ok ? response.json() : { enabled: false, measurementId: "" })
       .then((config: { enabled?: unknown; measurementId?: unknown }) => {
         if (!active) return;
         const value = typeof config.measurementId === "string" ? config.measurementId : "";
-        setMeasurementId(config.enabled === true && /^G-[A-Z0-9]+$/i.test(value) ? value : undefined);
+        const nextMeasurementId = config.enabled === true && /^G-[A-Z0-9]+$/i.test(value) ? value : undefined;
+        if (nextMeasurementId) {
+          window.dataLayer = window.dataLayer || [];
+          window.gtag = (...args: unknown[]) => window.dataLayer?.push(args);
+          window.gtag("consent", "default", {
+            analytics_storage: "granted",
+            ad_storage: "denied",
+            ad_user_data: "denied",
+            ad_personalization: "denied",
+          });
+        }
+        setMeasurementId(nextMeasurementId);
       })
       .catch(() => { if (active) setMeasurementId(undefined); });
     return () => { active = false; };
-  }, [analyticsAllowedPath, consent]);
+  }, [analyticsAllowedPath]);
 
   useEffect(() => {
-    if (!analyticsAllowedPath || !ready || consent !== "granted" || !measurementId || !window.gtag) return;
+    if (!analyticsAllowedPath || !ready || !measurementId || !window.gtag) return;
     const query = searchParams.toString();
     window.gtag("event", "page_view", {
       page_location: window.location.href,
       page_path: `${pathname}${query ? `?${query}` : ""}`,
       page_title: document.title,
     });
-  }, [analyticsAllowedPath, consent, measurementId, pathname, ready, searchParams]);
+  }, [analyticsAllowedPath, measurementId, pathname, ready, searchParams]);
 
-  function choose(value: Exclude<Consent, null>) {
-    window.localStorage.setItem(analyticsConsentKey, value);
-    window.gtag?.("consent", "update", { analytics_storage: value });
-    setConsent(value);
-    window.dispatchEvent(new Event(analyticsConsentEvent));
+  function closeNotice() {
+    window.localStorage.setItem(analyticsNoticeKey, "closed");
+    setNoticeClosed(true);
+    window.dispatchEvent(new Event(analyticsNoticeEvent));
   }
 
   if (!analyticsAllowedPath) return null;
 
   return (
     <>
-      {consent === "granted" && measurementId && (
+      {measurementId && (
         <Script
           src={`https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(measurementId)}`}
           strategy="afterInteractive"
           onReady={() => {
-            window.dataLayer = window.dataLayer || [];
-            window.gtag = (...args: unknown[]) => window.dataLayer?.push(args);
-            window.gtag("consent", "update", { analytics_storage: "granted" });
+            if (!window.gtag) return;
             window.gtag("js", new Date());
             window.gtag("config", measurementId, {
               send_page_view: false,
@@ -90,15 +95,14 @@ export function AnalyticsConsent() {
           }}
         />
       )}
-      {consent === null && (
-        <aside className="analytics-consent" aria-label="Preferências de privacidade">
+      {!noticeClosed && (
+        <aside className="analytics-consent" aria-label="Aviso de cookies">
           <div>
-            <strong>Estatísticas e privacidade</strong>
-            <p>Com sua autorização, usamos uma contagem interna anonimizada e o Google Analytics para compreender o acesso ao conteúdo. Não armazenamos seu endereço IP completo.</p>
+            <strong>Cookies e tecnologias</strong>
+            <p>Utilizamos cookies e tecnologia para aprimorar sua experiência de navegação.</p>
           </div>
           <div className="analytics-consent-actions">
-            <button type="button" className="button secondary" onClick={() => choose("denied")}>Recusar</button>
-            <button type="button" className="button primary" onClick={() => choose("granted")}>Aceitar estatísticas</button>
+            <button type="button" className="button primary" onClick={closeNotice}>Fechar</button>
           </div>
         </aside>
       )}
@@ -108,8 +112,8 @@ export function AnalyticsConsent() {
 
 export function AnalyticsPreferencesButton() {
   function reopen() {
-    window.localStorage.removeItem(analyticsConsentKey);
-    window.dispatchEvent(new Event(analyticsConsentEvent));
+    window.localStorage.removeItem(analyticsNoticeKey);
+    window.dispatchEvent(new Event(analyticsNoticeEvent));
   }
-  return <button className="button secondary" type="button" onClick={reopen}>Gerenciar preferências</button>;
+  return <button className="button secondary" type="button" onClick={reopen}>Exibir aviso de cookies</button>;
 }

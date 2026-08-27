@@ -37,9 +37,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   }
   const { slug } = await params;
   if (!validSlug(slug)) return NextResponse.json({ counted: false }, { status: 400 });
-  if (request.headers.get("x-analytics-consent") !== "granted") {
-    return NextResponse.json({ counted: false, reason: "consent" }, { status: 202 });
-  }
   const cookieStore = await cookies();
   if (await verifySession(cookieStore.get("academia_session")?.value)) {
     return NextResponse.json({ counted: false, reason: "administrator" }, { status: 202 });

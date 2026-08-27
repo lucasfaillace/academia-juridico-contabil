@@ -429,7 +429,7 @@ export function AdminDashboard({
     setAnalyticsEnabled(data.enabled === true);
     setAnalyticsMeasurementId(data.measurementId || "");
     setAnalyticsStatus(data.enabled
-      ? "Google Analytics 4 configurado. A coleta continuará condicionada ao consentimento do visitante."
+      ? "Google Analytics 4 configurado. A coleta será iniciada nas áreas públicas."
       : "Google Analytics 4 desativado.");
   }
 
@@ -2720,7 +2720,7 @@ export function AdminDashboard({
                     autoCapitalize="characters"
                   />
                 </label>
-                <p className="account-password-guidance">O código do Google somente será carregado após o visitante aceitar as estatísticas e nunca será carregado em endereços iniciados por <code>/admin</code>.</p>
+                <p className="account-password-guidance">O código do Google é carregado no início da navegação pública e nunca é carregado em endereços iniciados por <code>/admin</code>.</p>
                 <button className="button primary" disabled={analyticsLoading}>
                   {analyticsLoading ? "Salvando…" : "Salvar Google Analytics"}
                 </button>

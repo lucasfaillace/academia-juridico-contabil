@@ -74,7 +74,8 @@ test("inclui controles de segurança e portabilidade", async () => {
   assert.doesNotMatch(nextConfig, /Content-Security-Policy-Report-Only/);
   assert.doesNotMatch(nextConfig, /unsafe-eval/);
   assert.doesNotMatch(nextConfig, /img-src https:/);
-  assert.match(nextConfig, /img-src 'self' data: blob: https:\/\/www\.googletagmanager\.com https:\/\/www\.google-analytics\.com/);
+  assert.match(nextConfig, /img-src 'self' data: blob: https:\/\/www\.googletagmanager\.com https:\/\/\*\.google-analytics\.com/);
+  assert.match(nextConfig, /connect-src[^\n]+https:\/\/\*\.analytics\.google\.com/);
   assert.match(nextConfig, /script-src-elem 'self' 'unsafe-inline' https:\/\/www\.googletagmanager\.com/);
   assert.match(nextConfig, /style-src-attr 'unsafe-inline'/);
   assert.match(nextConfig, /script-src-attr 'none'/);
@@ -821,9 +822,13 @@ test("registra visualizações privadas por data e apresenta estatísticas somen
   assert.match(dashboard, /\["statistics", "Estatísticas", BarChart3\]/);
   assert.match(articlePage, /ArticleViewTracker/);
   assert.doesNotMatch(articlePage, /totalViews|views30|views7/);
-  assert.match(tracker, /x-analytics-consent/);
-  assert.match(consent, /Google Analytics/);
-  assert.match(consent, /Aceitar estatísticas/);
+  assert.doesNotMatch(tracker, /analyticsConsent|x-analytics-consent/);
+  assert.doesNotMatch(viewApi, /x-analytics-consent|reason: "consent"/);
+  assert.match(consent, /googletagmanager\.com\/gtag\/js/);
+  assert.match(consent, /Utilizamos cookies e tecnologia para aprimorar sua experiência de navegação/);
+  assert.match(consent, />Fechar</);
+  assert.doesNotMatch(consent, /Aceitar estatísticas|Recusar/);
+  assert.match(consent, /analytics_storage: "granted"/);
   assert.match(consent, /allow_google_signals: false/);
   assert.match(layout, /AnalyticsConsent/);
   assert.match(env, /NEXT_PUBLIC_GA_MEASUREMENT_ID/);
@@ -1202,7 +1207,7 @@ test("permite alterar as credenciais administrativas sem armazenar senha em text
   assert.match(deployment, /Configurações → Conta administrativa/);
 });
 
-test("configura o GA4 pelo painel e exclui integralmente a administração da medição", async () => {
+test("carrega o GA4 nas áreas públicas e exclui integralmente a administração da medição", async () => {
   const [settingsStore, adminRoute, publicRoute, consent, dashboard, statistics, dockerfile, compose, deployment] = await Promise.all([
     readFile(new URL("lib/analytics-settings.ts", root), "utf8"),
     readFile(new URL("app/api/admin/analytics/route.ts", root), "utf8"),
@@ -1223,8 +1228,10 @@ test("configura o GA4 pelo painel e exclui integralmente a administração da me
   assert.match(publicRoute, /verifySession/);
   assert.match(publicRoute, /enabled: false, measurementId: ""/);
   assert.match(consent, /pathname !== "\/admin" && !pathname\.startsWith\("\/admin\/"\)/);
-  assert.match(consent, /consent !== "granted" \|\| !analyticsAllowedPath/);
   assert.match(consent, /fetch\("\/api\/analytics\/config", \{ cache: "no-store" \}\)/);
+  assert.doesNotMatch(consent, /consent !==|analyticsConsentKey/);
+  assert.match(consent, /analyticsNoticeKey/);
+  assert.match(consent, /analytics_storage: "granted"/);
   assert.match(consent, /if \(!analyticsAllowedPath\) return null/);
   assert.match(dashboard, /Google Analytics 4/);
   assert.match(dashboard, /Salvar Google Analytics/);
