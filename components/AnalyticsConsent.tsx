@@ -22,7 +22,7 @@ export function AnalyticsConsent({ initialMeasurementId }: { initialMeasurementI
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [noticeClosed, setNoticeClosed] = useState(true);
-  const [ready, setReady] = useState(false);
+  const [ready, setReady] = useState(Boolean(initialMeasurementId));
   const [measurementId, setMeasurementId] = useState<string | undefined>(initialMeasurementId);
   const initialPageViewSent = useRef(false);
   const analyticsAllowedPath = pathname !== "/admin" && !pathname.startsWith("/admin/");
@@ -44,6 +44,7 @@ export function AnalyticsConsent({ initialMeasurementId }: { initialMeasurementI
         const value = typeof config.measurementId === "string" ? config.measurementId : "";
         const nextMeasurementId = config.enabled === true && /^G-[A-Z0-9]+$/i.test(value) ? value : undefined;
         setMeasurementId(nextMeasurementId);
+        if (nextMeasurementId) setReady(true);
       })
       .catch(() => { if (active) setMeasurementId(undefined); });
     return () => { active = false; };
@@ -73,7 +74,7 @@ export function AnalyticsConsent({ initialMeasurementId }: { initialMeasurementI
 
   return (
     <>
-      {measurementId && (
+      {!initialMeasurementId && measurementId && (
         <>
           <Script
             async

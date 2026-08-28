@@ -19,15 +19,30 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const analytics = await getAnalyticsSettings().catch(() => ({ enabled: false, measurementId: "", source: "disabled" as const }));
+  const measurementId = analytics.enabled ? analytics.measurementId : undefined;
   return (
     <html lang="pt-BR">
       <head>
         <link rel="stylesheet" href="/katex.min.css" />
+        {measurementId && (
+          <>
+            <script async src={`https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(measurementId)}`} />
+            <script
+              id="ga-bootstrap"
+              dangerouslySetInnerHTML={{
+                __html: `window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', '${measurementId}');`,
+              }}
+            />
+          </>
+        )}
       </head>
       <body>
         {children}
         <Suspense>
-          <AnalyticsConsent initialMeasurementId={analytics.enabled ? analytics.measurementId : undefined} />
+          <AnalyticsConsent initialMeasurementId={measurementId} />
         </Suspense>
       </body>
     </html>
