@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   applicationName: "Academia Jurídico-Contábil",
   icons: { icon: "/favicon.png", shortcut: "/favicon.png", apple: "/favicon.png" },
   alternates: { canonical: "/" },
-  openGraph: { title: "Academia Jurídico-Contábil", description: "Blog e cursos para profissionais do Direito e da Contabilidade.", type: "website", locale: "pt_BR", siteName: "Academia Jurídico-Contábil", images: [{ url: "/og.png", width: 1730, height: 909, alt: "Academia Jurídico-Contábil" }] },
+  openGraph: { title: "Academia Jurídico-Contábil", description: "Blog e cursos para profissionais do Direito e da Contabilidade.", type: "website", locale: "pt_BR", siteName: "Academia Jurídico-Contábil", images: [{ url: "/og.png", width: 1200, height: 630, alt: "Academia Jurídico-Contábil" }] },
   twitter: { card: "summary_large_image", title: "Academia Jurídico-Contábil", description: "Blog e cursos para profissionais do Direito e da Contabilidade.", images: ["/og.png"] },
 };
 
