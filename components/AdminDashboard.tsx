@@ -602,7 +602,7 @@ export function AdminDashboard({
       if (!response.ok) {
         if (automatic) setAutosaveStatus("error");
         else setNotice(data.error || "Não foi possível salvar.");
-        return false;
+        return null;
       }
       setOriginalSlug(data.slug);
       setEditingStatus(status);
@@ -646,11 +646,11 @@ export function AdminDashboard({
         setAutosaveStatus(status === "draft" ? "saved" : "idle");
         setNotice(status === "draft" ? "Rascunho salvo." : "Artigo publicado.");
       }
-      return true;
+      return data.slug as string;
     } catch {
       if (automatic) setAutosaveStatus("error");
       else setNotice("Não foi possível salvar.");
-      return false;
+      return null;
     } finally {
       setSaving(false);
     }
@@ -668,15 +668,21 @@ export function AdminDashboard({
   ]);
 
   async function openPrivatePreview() {
-    if (!originalSlug || previewing) return;
+    if (previewing) return;
     setPreviewing(true);
     setNotice("");
     try {
+      let targetSlug = originalSlug;
+      if (editingStatus === "draft" || !targetSlug) {
+        const savedSlug = await save("draft", { automatic: true });
+        if (!savedSlug) return;
+        targetSlug = savedSlug;
+      }
       const response = await fetch("/api/admin/articles/preview", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          originalSlug,
+          originalSlug: targetSlug,
           title: title.trim(),
           summary,
           youtubeUrl,
