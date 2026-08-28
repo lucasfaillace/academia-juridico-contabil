@@ -2,7 +2,7 @@
 
 import Script from "next/script";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const analyticsNoticeKey = "academia_analytics_notice_closed";
 const analyticsNoticeEvent = "academia:analytics-notice";
@@ -24,6 +24,7 @@ export function AnalyticsConsent() {
   const [noticeClosed, setNoticeClosed] = useState(true);
   const [ready, setReady] = useState(false);
   const [measurementId, setMeasurementId] = useState<string>();
+  const initialPageViewSent = useRef(false);
   const analyticsAllowedPath = pathname !== "/admin" && !pathname.startsWith("/admin/");
 
   useEffect(() => {
@@ -42,16 +43,6 @@ export function AnalyticsConsent() {
         if (!active) return;
         const value = typeof config.measurementId === "string" ? config.measurementId : "";
         const nextMeasurementId = config.enabled === true && /^G-[A-Z0-9]+$/i.test(value) ? value : undefined;
-        if (nextMeasurementId) {
-          window.dataLayer = window.dataLayer || [];
-          window.gtag = (...args: unknown[]) => window.dataLayer?.push(args);
-          window.gtag("consent", "default", {
-            analytics_storage: "granted",
-            ad_storage: "denied",
-            ad_user_data: "denied",
-            ad_personalization: "denied",
-          });
-        }
         setMeasurementId(nextMeasurementId);
       })
       .catch(() => { if (active) setMeasurementId(undefined); });
@@ -60,6 +51,10 @@ export function AnalyticsConsent() {
 
   useEffect(() => {
     if (!analyticsAllowedPath || !ready || !measurementId || !window.gtag) return;
+    if (!initialPageViewSent.current) {
+      initialPageViewSent.current = true;
+      return;
+    }
     const query = searchParams.toString();
     window.gtag("event", "page_view", {
       page_location: window.location.href,
@@ -79,21 +74,24 @@ export function AnalyticsConsent() {
   return (
     <>
       {measurementId && (
-        <Script
-          src={`https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(measurementId)}`}
-          strategy="afterInteractive"
-          onReady={() => {
-            if (!window.gtag) return;
-            window.gtag("js", new Date());
-            window.gtag("config", measurementId, {
-              send_page_view: false,
-              anonymize_ip: true,
-              allow_google_signals: false,
-              allow_ad_personalization_signals: false,
-            });
-            setReady(true);
-          }}
-        />
+        <>
+          <Script
+            async
+            src={`https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(measurementId)}`}
+            strategy="afterInteractive"
+          />
+          <Script
+            id={`google-analytics-bootstrap-${measurementId}`}
+            strategy="afterInteractive"
+            dangerouslySetInnerHTML={{
+              __html: `window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', '${measurementId}');`,
+            }}
+            onReady={() => setReady(true)}
+          />
+        </>
       )}
       {!noticeClosed && (
         <aside className="analytics-consent" aria-label="Aviso de cookies">

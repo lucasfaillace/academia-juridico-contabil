@@ -847,8 +847,11 @@ test("registra visualizações privadas por data e apresenta estatísticas somen
   assert.match(consent, /Utilizamos cookies e tecnologia para aprimorar sua experiência de navegação/);
   assert.match(consent, />Fechar</);
   assert.doesNotMatch(consent, /Aceitar estatísticas|Recusar/);
-  assert.match(consent, /analytics_storage: "granted"/);
-  assert.match(consent, /allow_google_signals: false/);
+  assert.match(consent, /async[\s\S]*googletagmanager\.com\/gtag\/js/);
+  assert.match(consent, /window\.dataLayer = window\.dataLayer \|\| \[\]/);
+  assert.match(consent, /function gtag\(\)\{dataLayer\.push\(arguments\);\}/);
+  assert.match(consent, /gtag\('js', new Date\(\)\)/);
+  assert.match(consent, /gtag\('config', '\$\{measurementId\}'\)/);
   assert.match(layout, /AnalyticsConsent/);
   assert.match(env, /NEXT_PUBLIC_GA_MEASUREMENT_ID/);
   assert.match(env, /ANALYTICS_HASH_SECRET/);
@@ -1319,7 +1322,8 @@ test("carrega o GA4 nas áreas públicas e exclui integralmente a administraçã
   assert.match(consent, /fetch\("\/api\/analytics\/config", \{ cache: "no-store" \}\)/);
   assert.doesNotMatch(consent, /consent !==|analyticsConsentKey/);
   assert.match(consent, /analyticsNoticeKey/);
-  assert.match(consent, /analytics_storage: "granted"/);
+  assert.match(consent, /initialPageViewSent/);
+  assert.doesNotMatch(consent, /send_page_view: false/);
   assert.match(consent, /if \(!analyticsAllowedPath\) return null/);
   assert.match(dashboard, /Google Analytics 4/);
   assert.match(dashboard, /Salvar Google Analytics/);
