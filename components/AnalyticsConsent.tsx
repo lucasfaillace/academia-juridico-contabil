@@ -18,12 +18,12 @@ function readNoticeClosed() {
   return window.localStorage.getItem(analyticsNoticeKey) === "closed";
 }
 
-export function AnalyticsConsent({ initialMeasurementId }: { initialMeasurementId?: string } = {}) {
+export function AnalyticsConsent() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [noticeClosed, setNoticeClosed] = useState(true);
-  const [ready, setReady] = useState(Boolean(initialMeasurementId));
-  const [measurementId, setMeasurementId] = useState<string | undefined>(initialMeasurementId);
+  const [ready, setReady] = useState(false);
+  const [measurementId, setMeasurementId] = useState<string>();
   const initialPageViewSent = useRef(false);
   const analyticsAllowedPath = pathname !== "/admin" && !pathname.startsWith("/admin/");
 
@@ -44,7 +44,6 @@ export function AnalyticsConsent({ initialMeasurementId }: { initialMeasurementI
         const value = typeof config.measurementId === "string" ? config.measurementId : "";
         const nextMeasurementId = config.enabled === true && /^G-[A-Z0-9]+$/i.test(value) ? value : undefined;
         setMeasurementId(nextMeasurementId);
-        if (nextMeasurementId) setReady(true);
       })
       .catch(() => { if (active) setMeasurementId(undefined); });
     return () => { active = false; };
@@ -74,7 +73,7 @@ export function AnalyticsConsent({ initialMeasurementId }: { initialMeasurementI
 
   return (
     <>
-      {!initialMeasurementId && measurementId && (
+      {measurementId && (
         <>
           <Script
             async

@@ -17,34 +17,6 @@ export const metadata: Metadata = {
   twitter: { card: "summary_large_image", title: "Academia Jurídico-Contábil", description: "Blog e cursos para profissionais do Direito e da Contabilidade.", images: ["/og.png"] },
 };
 
-export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const analytics = await getAnalyticsSettings().catch(() => ({ enabled: false, measurementId: "", source: "disabled" as const }));
-  const measurementId = analytics.enabled ? analytics.measurementId : undefined;
-  return (
-    <html lang="pt-BR">
-      <head>
-        <link rel="stylesheet" href="/katex.min.css" />
-        {measurementId && (
-          <>
-            <script async src={`https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(measurementId)}`} />
-            <script
-              id="ga-bootstrap"
-              dangerouslySetInnerHTML={{
-                __html: `window.dataLayer = window.dataLayer || [];
-function gtag(){dataLayer.push(arguments);}
-gtag('js', new Date());
-gtag('config', '${measurementId}');`,
-              }}
-            />
-          </>
-        )}
-      </head>
-      <body>
-        {children}
-        <Suspense>
-          <AnalyticsConsent initialMeasurementId={measurementId} />
-        </Suspense>
-      </body>
-    </html>
-  );
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  return <html lang="pt-BR"><head><link rel="stylesheet" href="/katex.min.css" /></head><body>{children}<Suspense><AnalyticsConsent /></Suspense></body></html>;
 }
