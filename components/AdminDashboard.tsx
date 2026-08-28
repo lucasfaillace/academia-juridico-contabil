@@ -669,14 +669,6 @@ export function AdminDashboard({
 
   async function openPrivatePreview() {
     if (!originalSlug || previewing) return;
-    const previewWindow = window.open("about:blank", "academia-private-article-preview");
-    if (!previewWindow) {
-      setNotice("Permita pop-ups para abrir a prévia privada.");
-      return;
-    }
-    previewWindow.opener = null;
-    previewWindow.document.title = "Preparando prévia…";
-    previewWindow.document.body.textContent = "Preparando prévia privada…";
     setPreviewing(true);
     setNotice("");
     try {
@@ -696,13 +688,11 @@ export function AdminDashboard({
       });
       const data = await response.json();
       if (!response.ok) {
-        previewWindow.close();
         setNotice(data.error || "Não foi possível preparar a prévia.");
         return;
       }
-      previewWindow.location.replace(`/admin/preview/${encodeURIComponent(data.slug)}?v=${Date.now()}`);
+      window.location.assign(`/admin/preview/${encodeURIComponent(data.slug)}?v=${Date.now()}`);
     } catch {
-      previewWindow.close();
       setNotice("Não foi possível preparar a prévia.");
     } finally {
       setPreviewing(false);

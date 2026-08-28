@@ -962,8 +962,7 @@ test("oferece prévia privada de rascunhos no mesmo layout público", async () =
   ]);
   assert.match(dashboard, /Prévia privada/);
   assert.match(dashboard, /\/api\/admin\/articles\/preview/);
-  assert.match(dashboard, /window\.open\("about:blank", "academia-private-article-preview"\)/);
-  assert.match(dashboard, /previewWindow\.location\.replace\(`\/admin\/preview\/\$\{encodeURIComponent\(data\.slug\)\}\?v=\$\{Date\.now\(\)\}`\)/);
+  assert.match(dashboard, /window\.location\.assign\(`\/admin\/preview\/\$\{encodeURIComponent\(data\.slug\)\}\?v=\$\{Date\.now\(\)\}`\)/);
   assert.match(dashboard, /initialArticleSlug/);
   assert.match(dashboard, /history\.replaceState/);
   assert.match(adminPage, /searchParams/);
