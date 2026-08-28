@@ -1577,13 +1577,12 @@ export function AdminDashboard({
                 </button>
               </div>
             </div>
-            {autosaveEligible && autosaveDisplayStatus !== "idle" && (
+            {autosaveEligible && autosaveDisplayStatus !== "idle" && autosaveDisplayStatus !== "pending" && (
               <p
                 className={`draft-autosave-status is-${autosaveDisplayStatus}`}
                 aria-live="polite"
                 role={autosaveDisplayStatus === "error" ? "alert" : undefined}
               >
-                {autosaveDisplayStatus === "pending" && "Alterações aguardando salvamento automático…"}
                 {autosaveDisplayStatus === "saving" && "Salvando rascunho…"}
                 {autosaveDisplayStatus === "saved" && "Rascunho salvo automaticamente."}
                 {autosaveDisplayStatus === "error" && "Não foi possível salvar automaticamente. Use “Salvar rascunho”."}
