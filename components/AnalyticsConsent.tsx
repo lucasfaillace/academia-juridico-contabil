@@ -18,12 +18,12 @@ function readNoticeClosed() {
   return window.localStorage.getItem(analyticsNoticeKey) === "closed";
 }
 
-export function AnalyticsConsent() {
+export function AnalyticsConsent({ initialMeasurementId }: { initialMeasurementId?: string } = {}) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [noticeClosed, setNoticeClosed] = useState(true);
   const [ready, setReady] = useState(false);
-  const [measurementId, setMeasurementId] = useState<string>();
+  const [measurementId, setMeasurementId] = useState<string | undefined>(initialMeasurementId);
   const initialPageViewSent = useRef(false);
   const analyticsAllowedPath = pathname !== "/admin" && !pathname.startsWith("/admin/");
 
