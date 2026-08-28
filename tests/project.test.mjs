@@ -1013,6 +1013,7 @@ test("preserva o título original e amplia a tipografia editorial pública na me
   assert.match(styles, /\.article-hero h1\s*\{[^}]*font-size:clamp\(1\.85rem,3\.3vw,2\.65rem\)[^}]*font-weight:700/);
   assert.match(styles, /\.article-subtitle\s*\{[^}]*font-size:1\.35rem/);
   assert.match(styles, /\.article-content\s*\{[^}]*font-size:1\.25rem[^}]*line-height:1\.68/);
+  assert.match(styles, /@media \(max-width:600px\)[\s\S]*\.article-content\s*\{\s*font-size:1\.225rem;\s*\}/);
   assert.match(styles, /\.article-content h1\s*\{[^}]*font-size:1\.8125rem[^}]*font-weight:400/);
   assert.match(styles, /\.article-content h2\s*\{[^}]*font-size:1\.8125rem[^}]*font-weight:700/);
   assert.match(styles, /\.article-content h3\s*\{[^}]*font-size:1\.8125rem[^}]*font-weight:400/);

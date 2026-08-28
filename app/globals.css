@@ -1013,7 +1013,7 @@ th { background:#edf2f8; color:var(--blue-950); }
   .footer-bottom { flex-direction:column; }
   .article-row { grid-template-columns:1fr; gap:8px; }
   .article-byline { flex-direction:column; }
-  .article-content { font-size:.98rem; }
+  .article-content { font-size:1.225rem; }
   .article-content figure[data-image-width="50"],.article-content figure[data-image-width="75"] { width:100%; }
   .article-content figure[data-image-zoom="true"]::after { content:"Ampliar"; }
   .article-image-lightbox { padding:12px; }
