@@ -1017,9 +1017,9 @@ test("preserva o título original e amplia a tipografia editorial pública na me
   assert.match(styles, /\.article-content h2\s*\{[^}]*font-size:1\.8125rem[^}]*font-weight:700/);
   assert.match(styles, /\.article-content h3\s*\{[^}]*font-size:1\.8125rem[^}]*font-weight:400/);
   assert.match(styles, /\.article-content h4\s*\{[^}]*color:var\(--blue-950\)[^}]*font-size:1\.5625rem[^}]*font-weight:500/);
-  assert.match(styles, /\.ProseMirror h4\s*\{[^}]*color:var\(--blue-950\)[^}]*font-size:1rem[^}]*font-weight:500/);
+  assert.match(styles, /\.ProseMirror h4\s*\{[^}]*color:var\(--blue-950\)[^}]*font-size:1\.5625rem[^}]*font-weight:500/);
   assert.match(styles, /\.article-content blockquote\s*\{[^}]*font-size:1\.25rem/);
-  assert.match(styles, /\.ProseMirror blockquote\s*\{[^}]*font-size:1rem/);
+  assert.match(styles, /\.ProseMirror blockquote\s*\{[^}]*font-size:1\.25rem/);
   assert.match(styles, /\.article-formula \.katex\s*\{[^}]*font-size:1em/);
   assert.match(styles, /\.editor-formula-preview \.katex,\.formula-live-preview \.katex\s*\{[^}]*font-size:1em/);
   assert.match(styles, /\.article-abstract\s*\{[^}]*font-size:1\.1375rem/);
