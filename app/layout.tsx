@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { AnalyticsConsent } from "@/components/AnalyticsConsent";
-import { getAnalyticsSettings } from "@/lib/analytics-settings";
 import "./globals.css";
 /* eslint-disable @next/next/no-css-tags -- KaTeX é servido localmente para não depender de CDN. */
 
