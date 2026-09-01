@@ -1732,7 +1732,7 @@ export function AdminDashboard({
                       onChange={(event) => setYoutubeUrl(event.target.value)}
                       placeholder="https://www.youtube.com/watch?v=..."
                     />
-                    <small className="field-help">Opcional. O convite para assistir aparecerá ao final do artigo.</small>
+                    <small className="field-help">Opcional. O convite para assistir aparecerá após o resumo, antes do sumário.</small>
                   </label>
                 </div>
               </details>

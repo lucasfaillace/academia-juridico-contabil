@@ -10,8 +10,8 @@ import { formatAuthorNames, type Article } from "@/lib/content";
 
 export function ArticlePageView({ article, preview = false }: { article: Article; preview?: boolean }) {
   const share = `/blog/${article.slug}`;
+  const youtubeUrl = article.youtubeUrl?.trim();
   const preparedContent = article.contentHtml ? prepareArticleHtml(article.contentHtml, {
-    hasVideo: Boolean(article.youtubeUrl),
     hasComments: true,
     references: article.bibliographicReferences,
   }) : "";
@@ -74,18 +74,18 @@ export function ArticlePageView({ article, preview = false }: { article: Article
         <div className="container article-layout">
           <div className="article-content">
             <p className="article-abstract"><strong>Resumo.</strong> {article.summary}</p>
+            {youtubeUrl && (
+              <aside className="article-video-callout" id="video-explicativo" aria-label="Vídeo explicativo do artigo">
+                <CirclePlay aria-hidden="true" />
+                <div><strong>Vídeo explicativo</strong><p>Veja no canal da Academia o conteúdo complementar deste artigo.</p></div>
+                <a href={youtubeUrl} target="_blank" rel="noopener noreferrer">Assistir no YouTube</a>
+              </aside>
+            )}
             {article.contentHtml ? <ArticleRichContent html={preparedContent} /> : (
               <>
                 <h2 id="introducao">1. Introdução</h2>
                 <p>Conteúdo provisório. O texto definitivo será redigido e revisado pelo autor no painel editorial.</p>
               </>
-            )}
-            {article.youtubeUrl && (
-              <aside className="article-video-callout" id="video-explicativo" aria-label="Vídeo explicativo do artigo">
-                <CirclePlay aria-hidden="true" />
-                <div><strong>Vídeo explicativo</strong><p>Veja no canal da Academia o conteúdo complementar deste artigo.</p></div>
-                <a href={article.youtubeUrl} target="_blank" rel="noopener noreferrer">Assistir no YouTube</a>
-              </aside>
             )}
             {preview ? (
               <section className="article-comments preview-comments" id="comentarios" aria-labelledby="comments-title">

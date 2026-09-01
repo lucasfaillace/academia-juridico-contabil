@@ -235,7 +235,7 @@ test("inclui fórmulas, tags, pesquisa integral e sumário acadêmico", async ()
   assert.match(editor, /editor-sticky-controls[\s\S]*editor-formula-settings[\s\S]*<EditorContent/);
   assert.doesNotMatch(editor, /insertTable/);
   assert.match(articleHtml, /katex\.renderToString/);
-  assert.match(articleHtml, /Vídeo explicativo/);
+  assert.doesNotMatch(articleHtml, /#video-explicativo|Vídeo explicativo/);
   assert.match(articleHtml, /Comentários/);
   assert.match(articleList, /role="search"/);
   assert.match(repository, /websearch_to_tsquery\('portuguese'/);
@@ -987,14 +987,21 @@ test("oferece prévia privada de rascunhos no mesmo layout público", async () =
   assert.match(previewMigration, /snapshot jsonb NOT NULL/);
 });
 
-test("mantém o sumário logo após o resumo e com largura contida", async () => {
+test("mantém o vídeo condicional entre o resumo e o sumário sem incluí-lo no índice", async () => {
   const [articleView, styles] = await Promise.all([
     readFile(new URL("components/ArticlePageView.tsx", root), "utf8"),
     readFile(new URL("app/globals.css", root), "utf8"),
   ]);
-  assert.match(articleView, /article-abstract[\s\S]*ArticleRichContent html=\{preparedContent\}/);
+  const summaryPosition = articleView.indexOf('className="article-abstract"');
+  const videoPosition = articleView.indexOf('className="article-video-callout"');
+  const contentPosition = articleView.indexOf("<ArticleRichContent html={preparedContent} />");
+  assert.ok(summaryPosition >= 0 && summaryPosition < videoPosition);
+  assert.ok(videoPosition < contentPosition);
+  assert.match(articleView, /const youtubeUrl = article\.youtubeUrl\?\.trim\(\)/);
+  assert.match(articleView, /\{youtubeUrl && \(/);
   assert.doesNotMatch(articleView, /article-toc-column|articleBody/);
   assert.match(styles, /\.article-inline-toc\s*\{[^}]*width:fit-content[^}]*max-width:100%/);
+  assert.match(styles, /\.article-video-callout\s*\{[^}]*margin:0 0 28px/);
   assert.match(styles, /\.article-content blockquote p \{ margin:0; \}/);
   assert.doesNotMatch(styles, /\.article-inline-toc\s*\{[^}]*min-width/);
 });
@@ -1064,6 +1071,7 @@ test("organiza a edição do artigo em painéis recolhíveis sem mover as açõe
   assert.match(dashboard, /<summary><span>Resumo<\/span>/);
   assert.match(dashboard, /<summary><span>Tags<\/span>/);
   assert.match(dashboard, /<summary><span>Vídeo explicativo<\/span>/);
+  assert.match(dashboard, /após o resumo, antes do sumário/);
   assert.match(dashboard, /<summary><span>Conteúdo do artigo<\/span>/);
   assert.match(editor, /className="editor-footnotes"/);
   assert.match(editor, /setNotesOpen\(true\)/);

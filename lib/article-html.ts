@@ -194,7 +194,6 @@ function renderFormulas(value: string) {
 }
 
 export function prepareArticleHtml(source: string, options: {
-  hasVideo?: boolean;
   hasComments?: boolean;
   references?: Array<{ id: string; referenceText: string; referenceHtml: string }>;
 } = {}) {
@@ -260,7 +259,7 @@ export function prepareArticleHtml(source: string, options: {
   const toc = headings.length
     ? `<nav class="article-inline-toc" aria-label="Sumário do artigo"><p>Sumário</p><ul>${headings
         .map(({ id, level, number, title }) => `<li data-level="${level}"><a href="#${escapeHtml(id)}"><span class="toc-number">${escapeHtml(number)}</span><span class="toc-title">${escapeHtml(title)}</span></a></li>`)
-        .join("")}${protectedFootnotes.length ? '<li data-level="2" class="toc-special"><a href="#notas"><span class="toc-title">Notas</span></a></li>' : ""}${options.hasVideo ? '<li data-level="2" class="toc-special"><a href="#video-explicativo"><span class="toc-title">Vídeo explicativo</span></a></li>' : ""}${options.hasComments ? '<li data-level="2" class="toc-special"><a href="#comentarios"><span class="toc-title">Comentários</span></a></li>' : ""}</ul></nav>`
+        .join("")}${protectedFootnotes.length ? '<li data-level="2" class="toc-special"><a href="#notas"><span class="toc-title">Notas</span></a></li>' : ""}${options.hasComments ? '<li data-level="2" class="toc-special"><a href="#comentarios"><span class="toc-title">Comentários</span></a></li>' : ""}</ul></nav>`
     : "";
 
   const withTableOfContents = withHeadingIds.replace(
